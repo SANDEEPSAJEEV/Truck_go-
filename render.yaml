@@ -14,7 +14,12 @@ services:
     plan: free
     region: singapore
     rootDir: backend
-    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run build
+    # --include=dev is required: NODE_ENV=production (below) otherwise makes npm skip
+    # devDependencies, and both the TypeScript compiler and the Prisma CLI live there.
+    # Without them `prisma generate` and `tsc` are simply absent and the build fails.
+    # Only the build needs them; the running server uses dist/ plus @prisma/client, which
+    # is a runtime dependency.
+    buildCommand: npm ci --include=dev && npx prisma generate && npx prisma migrate deploy && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:
