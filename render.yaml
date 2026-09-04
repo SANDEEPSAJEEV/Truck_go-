@@ -25,6 +25,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Staging only. Lets the SMS and KYC mocks run under NODE_ENV=production so the app
+      # is testable before DLT registration and a Surepass account exist. OTP codes then
+      # appear in the Render logs instead of arriving by SMS, and document checks are
+      # simulated. REMOVE THIS before real drivers or customers use the service.
+      - key: ALLOW_MOCK_PROVIDERS
+        value: "1"
       # Set these in the Render dashboard — never commit secrets.
       #   DATABASE_URL             the Neon connection string
       #   JWT_ACCESS_SECRET        long random string

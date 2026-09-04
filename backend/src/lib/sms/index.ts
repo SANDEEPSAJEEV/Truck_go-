@@ -65,11 +65,20 @@ export function getSmsProvider(): SmsProvider {
   if (MSG91_AUTH_KEY && MSG91_SENDER_ID && MSG91_DLT_TEMPLATE_ID) {
     provider = new Msg91Provider(MSG91_AUTH_KEY, MSG91_SENDER_ID, MSG91_DLT_TEMPLATE_ID);
   } else {
-    if (NODE_ENV === "production") {
+    if (NODE_ENV === "production" && process.env.ALLOW_MOCK_PROVIDERS !== "1") {
       // Silently falling back to a logger in production would mean no user could ever
       // receive a code, and the failure would be invisible until someone complained.
       throw new Error(
         "No SMS provider configured. Set MSG91_AUTH_KEY, MSG91_SENDER_ID and MSG91_DLT_TEMPLATE_ID.",
+      );
+    }
+    if (NODE_ENV === "production") {
+      // Deliberate escape hatch for a staging deployment that has to work before DLT
+      // registration clears (a multi-day government process). It stays loud on purpose:
+      // the danger was never mocking, it was mocking without anyone realising.
+      console.warn(
+        "[sms] ALLOW_MOCK_PROVIDERS=1 — codes are written to these logs and NOT sent by SMS. " +
+          "Never leave this set on a deployment real users can reach.",
       );
     }
     provider = new MockSmsProvider();

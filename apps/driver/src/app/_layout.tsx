@@ -14,6 +14,7 @@ import {
 import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono';
 
 import { AuthProvider } from '@/lib/auth-context';
+import { warmUp } from '@/lib/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,6 +40,12 @@ export default function RootLayout() {
   // exactly like a launch crash. A missing typeface should degrade to a fallback face,
   // never to a dead splash screen.
   const ready = fontsLoaded || Boolean(fontError);
+
+  // Fired as early as possible, so the server is already waking while the driver is still
+  // reading the first screen.
+  useEffect(() => {
+    warmUp();
+  }, []);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();

@@ -155,10 +155,19 @@ export function getKycProvider(): KycProvider {
   if (SUREPASS_TOKEN) {
     provider = new SurepassProvider(SUREPASS_TOKEN);
   } else {
-    if (NODE_ENV === "production") {
+    if (NODE_ENV === "production" && process.env.ALLOW_MOCK_PROVIDERS !== "1") {
       // Approving real drivers against a mock would be the single most dangerous silent
       // failure in this system.
       throw new Error("No KYC provider configured. Set SUREPASS_TOKEN.");
+    }
+    if (NODE_ENV === "production") {
+      // Same deliberate staging escape hatch as SMS. Worth being blunt about what it
+      // means: with this set, "verified" means a deterministic stand-in said so, not that
+      // anyone checked a licence against government records.
+      console.warn(
+        "[kyc] ALLOW_MOCK_PROVIDERS=1 — driver documents are NOT checked against " +
+          "government records. Never leave this set on a deployment real drivers can reach.",
+      );
     }
     provider = new MockKycProvider();
   }

@@ -8,7 +8,31 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const TOKEN_KEY = 'truckgo.accessToken';
 const REFRESH_KEY = 'truckgo.refreshToken';
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Wakes a sleeping server before the driver asks it for anything.
+ *
+ * The API is on a free tier that spins down after ~15 minutes idle, and the first request
+ * afterwards can take 30-60s while the instance and the database both wake up. Left alone
+ * that lands on whatever the driver happened to tap first, which fails and looks like the
+ * app is broken.
+ *
+ * Deliberately a GET to /health and nothing else: it has no side effects, so it is safe to
+ * fire and forget. Retrying a real request instead would risk repeating a write — a
+ * timed-out request may well have succeeded on the server, which is exactly what a cold
+ * start looks like from the client.
+ */
+export function warmUp(): void {
+  if (DEMO_MODE) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 70_000);
+  fetch(`${API_URL}/health`, { signal: controller.signal })
+    .catch(() => {
+      // Nothing to do — the next real request will surface any genuine outage.
+    })
+    .finally(() => clearTimeout(timer));
+}
 
 export async function getAccessToken() {
   // Demo mode has no backend to authenticate against, so a placeholder keeps the auth
