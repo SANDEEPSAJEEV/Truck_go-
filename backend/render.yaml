@@ -1,0 +1,48 @@
+# Render deployment blueprint.
+#
+# The database is NOT defined here — Postgres already lives on Neon and is reachable from
+# anywhere, so Render only ever runs the API. That also keeps the data out of the free
+# tier's 90-day expiry.
+#
+# `prisma migrate deploy` (not `migrate dev`) runs on every deploy: it applies committed
+# migrations and never generates new ones or prompts, which is the only safe form for a
+# non-interactive environment.
+services:
+  - type: web
+    name: truckgo-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Set these in the Render dashboard — never commit secrets.
+      #   DATABASE_URL             the Neon connection string
+      #   JWT_ACCESS_SECRET        long random string
+      #   JWT_REFRESH_SECRET       long random string (different from the access secret)
+      #   JWT_VERIFICATION_SECRET  long random string (different again)
+      #   CORS_ORIGINS             comma-separated web origins, if any
+      #   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET
+      #   GOOGLE_MAPS_SERVER_KEY   once the key's Android restriction is removed
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_VERIFICATION_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GOOGLE_MAPS_SERVER_KEY
+        sync: false

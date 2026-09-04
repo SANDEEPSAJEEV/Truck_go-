@@ -1,0 +1,251 @@
+            if(!r9) { _fun1351_ip = 506; continue _fun1351 }
+case 495:
+            r8 = r9.__esModule;
+            r14 = r9;
+            if(r8) { _fun1351_ip = 519; continue _fun1351 }
+case 506:
+            r8 = {'default': null};
+            r8[0] = r9;
+            r14 = r8;
+case 519:
+            r8 = r5[r12];
+            r9 = r6.bind(r0)(r8);
+            if(!r9) { _fun1351_ip = 542; continue _fun1351 }
+case 531:
+            r8 = r9.__esModule;
+            r13 = r9;
+            if(r8) { _fun1351_ip = 555; continue _fun1351 }
+case 542:
+            r8 = {'default': null};
+            r8[0] = r9;
+            r13 = r8;
+case 555:
+            r8 = r5[r13];
+            r9 = r6.bind(r0)(r8);
+            if(!r9) { _fun1351_ip = 578; continue _fun1351 }
+case 567:
+            r8 = r9.__esModule;
+            r12 = r9;
+            if(r8) { _fun1351_ip = 591; continue _fun1351 }
+case 578:
+            r8 = {'default': null};
+            r8[0] = r9;
+            r12 = r8;
+case 591:
+            r8 = r5[r14];
+            r9 = r6.bind(r0)(r8);
+            if(!r9) { _fun1351_ip = 614; continue _fun1351 }
+case 603:
+            r8 = r9.__esModule;
+            r11 = r9;
+            if(r8) { _fun1351_ip = 627; continue _fun1351 }
+case 614:
+            r8 = {'default': null};
+            r8[0] = r9;
+            r11 = r8;
+case 627:
+            r8 = r5[r15];
+            r9 = r6.bind(r0)(r8);
+            if(!r9) { _fun1351_ip = 650; continue _fun1351 }
+case 639:
+            r8 = r9.__esModule;
+            r10 = r9;
+            if(r8) { _fun1351_ip = 663; continue _fun1351 }
+case 650:
+            r8 = {'default': null};
+            r8[0] = r9;
+            r10 = r8;
+case 663:
+            r8 = r5[r16];
+            r23 = r6.bind(r0)(r8);
+            if(!r23) { _fun1351_ip = 686; continue _fun1351 }
+case 675:
+            r9 = r23.__esModule;
+            r8 = r23;
+            if(r9) { _fun1351_ip = 699; continue _fun1351 }
+case 686:
+            r9 = {'default': null};
+            r9[0] = r23;
+            r8 = r9;
+case 699:
+            r5 = r5[r17];
+            r9 = r6.bind(r0)(r5);
+            if(!r9) { _fun1351_ip = 722; continue _fun1351 }
+case 711:
+            r5 = r9.__esModule;
+            r6 = r9;
+            if(r5) { _fun1351_ip = 735; continue _fun1351 }
+case 722:
+            r5 = {'default': null};
+            r5[0] = r9;
+            r6 = r5;
+case 735:
+            r9 = {'en': null, 'hi': null, 'te': null, 'ta': null, 'ml': null};
+            r5 = {'common': null, 'user': null, 'driver': null};
+            r22 = r22.default;
+            r5[0] = r22;
+            r21 = r21.default;
+            r5[1] = r21;
+            r20 = r20.default;
+            r5[2] = r20;
+            r9[0] = r5;
+            r5 = {'common': null, 'user': null, 'driver': null};
+            r19 = r19.default;
+            r5[0] = r19;
+            r18 = r18.default;
+            r5[1] = r18;
+            r17 = r17.default;
+            r5[2] = r17;
+            r9[1] = r5;
+            r5 = {'common': null, 'user': null, 'driver': null};
+            r16 = r16.default;
+            r5[0] = r16;
+            r15 = r15.default;
+            r5[1] = r15;
+            r14 = r14.default;
+            r5[2] = r14;
+            r9[2] = r5;
+            r5 = {'common': null, 'user': null, 'driver': null};
+            r13 = r13.default;
+            r5[0] = r13;
+            r12 = r12.default;
+            r5[1] = r12;
+            r11 = r11.default;
+            r5[2] = r11;
+            r9[3] = r5;
+            r5 = {'common': null, 'user': null, 'driver': null};
+            r10 = r10.default;
+            r5[0] = r10;
+            r8 = r8.default;
+            r5[1] = r8;
+            r6 = r6.default;
+            r5[2] = r6;
+            r9[4] = r5;
+            var _closure0_slot3 = r9;
+            r1 = false;
+            var _closure0_slot4 = r1;
+            r8 = r7.DEFAULT_LANGUAGE;
+            r1 = _closure0_slot4;
+            r6 = r2.default;
+            if(r1) { _fun1351_ip = 1052; continue _fun1351 }
+case 954:
+            r5 = r6.use;
+            r4 = r4.initReactI18next;
+            r6 = r5.bind(r6)(r4);
+            r5 = r6.init;
+            r4 = {'resources': null, 'lng': null, 'fallbackLng': null, 'ns': null, 'defaultNS': 'common', 'interpolation': null, 'returnNull': false, 'react': null};
+            r4[0] = r9;
+            r4[1] = r8;
+            r7 = r7.DEFAULT_LANGUAGE;
+            r4[2] = r7;
+            r7 = ['common', 'user', 'driver'];
+            r4[3] = r7;
+            r7 = {'escapeValue': false};
+            r4[5] = r7;
+            r7 = {'useSuspense': false};
+            r4[7] = r7;
+            r4 = r5.bind(r6)(r4);
+            r1 = true;
+            _closure0_slot4 = r1;
+            r4 = r2.default;
+            _fun1351_ip = 1052; continue _fun1351;
+case 1052:
+            r2 = r2.default;
+            var _closure0_slot5 = r2;
+            return r0;
+        }
+    };
+    r9 = r11.bind(r5)(r9, r0, r10);
+    r11 = r8.__d;
+    r0 = 1350;
+    r10 = new Array(0);
+    r9 = function(a0, a1, a2, a3, a4, a5, a6) {
+        r2 = {'action': null, 'status': null, 'error': null, 'dateShort': '{{month}} {{day}}, {{year}}', 'day': null, 'month': null, 'language': null, 'validation': null, 'cancelSheet': null, 'rating': null, 'chat': null, 'map': null, 'bookingStatus': null, 'bookingMsg': null, 'kyc': null, 'tripAction': null, 'tripBanner': null, 'serverSettings': null, 'distanceKm': '{{km}} km', 'etaMinutes_one': '{{count}} min away', 'etaMinutes_other': '{{count}} min away'};
+        r1 = {'cancel': 'Cancel', 'confirm': 'Confirm', 'retry': 'Retry', 'ok': 'OK', 'back': 'Back', 'close': 'Close', 'continue': 'Continue', 'save': 'Save', 'done': 'Done', 'login': 'Log In', 'next': 'Next', 'tryAgain': 'Try Again'};
+        r2[0] = r1;
+        r1 = {'loading': 'Loading…', 'onTheWay': 'On the way', 'arrived': 'Arrived', 'inTransit': 'In Transit', 'atDrop': 'At drop-off', 'delivered': 'Delivered', 'cancelled': 'Cancelled'};
+        r2[1] = r1;
+        r1 = {'generic': 'Something went wrong. Please try again.', 'network': 'Could not reach the server. Check your connection.', 'notReachable': 'Could not reach the server.', 'cancelFailed': 'Could not cancel. Please try again.'};
+        r2[2] = r1;
+        r1 = {'sun': 'Sun', 'mon': 'Mon', 'tue': 'Tue', 'wed': 'Wed', 'thu': 'Thu', 'fri': 'Fri', 'sat': 'Sat'};
+        r2[4] = r1;
+        r1 = {'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr', 'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug', 'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'};
+        r2[5] = r1;
+        r1 = {'title': 'Language', 'chooseTitle': 'Choose your language', 'subtitle': 'Applies across the whole app.'};
+        r2[6] = r1;
+        r1 = {'phone': 'Enter a valid phone number', 'otp': 'Enter the 4–8 digit code', 'email': 'Enter a valid email address', 'vehicleNumber': 'Enter a valid vehicle number (e.g. MH12AB1234)', 'password': 'Password must be at least 8 characters', 'thisField': 'This field', 'required': '{{label}} is required', 'pan': 'Invalid PAN (format ABCDE1234F)', 'ifsc': 'Invalid IFSC (format ABCD0123456)', 'bankAccount': 'Account number must be 6–20 digits', 'passwordsMatch': 'Passwords do not match'};
+        r2[7] = r1;
+        r1 = {'other': 'Other', 'otherPlaceholder': 'Tell us what happened', 'confirmCancellation': 'Confirm cancellation', 'keepRide': 'Keep my ride'};
+        r2[8] = r1;
+        r1 = {'shipmentId': 'SHIPMENT ID', 'delivered': 'Delivered', 'shareExperience': 'Share Your Experience', 'yourDriverWas': 'Your driver was {{name}}', 'howWasDriver': 'How was your driver?', 'yourCustomerWas': 'Your customer was {{name}}', 'howWasCustomer': 'How was your customer?', 'tapToRate': 'TAP TO RATE', 'selectCategory': 'SELECT CATEGORY', 'commentsLabel': 'Additional Comments (Optional)', 'commentsPlaceholder': 'Share your experience with us…', 'starFirst': 'Please tap a star rating first.', 'submitFailed': 'Could not submit your rating. Please try again.', 'submit': 'Submit Feedback', 'notNow': 'Not now', 'cat': null};
+        r3 = {'deliverySpeed': 'Delivery Speed', 'driverProfessionalism': 'Driver Professionalism', 'appExperience': 'App Experience', 'packageCondition': 'Package Condition', 'punctuality': 'Punctuality', 'clearCommunication': 'Clear Communication', 'cargoReady': 'Cargo Ready', 'politeness': 'Politeness'};
+        r1[15] = r3;
+        r2[9] = r1;
+        r1 = {'customer': 'Customer', 'driver': 'Driver', 'closed': 'This chat is closed.', 'closedEnded': 'This chat is closed — the trip has ended.', 'sayHi': 'Say hi to {{name}} — messages are shared for this trip only.', 'typing': '{{name}} is typing…', 'messagePlaceholder': 'Message…', 'notSent': 'Not sent — tap to retry'};
+        r2[10] = r1;
+        r1 = {'preview': 'MAP PREVIEW', 'unavailable': 'Map unavailable', 'yourLocation': 'YOUR LOCATION', 'routeMap': 'ROUTE MAP', 'needDevBuild': 'Real maps need a dev build', 'opensInApp': 'Map opens in the mobile app', 'you': 'You', 'driver': 'Driver', 'pickup': 'Pickup', 'dropoff': 'Drop-off', 'findingLocation': 'Finding your location…', 'locationUnavailable': 'Location unavailable', 'permissionDenied': 'Location permission denied', 'locationError': 'Could not get your location.', 'searching': 'Searching…', 'noMatches': 'No matching addresses'};
+        r2[11] = r1;
+        r1 = {'searching': 'Searching', 'scheduled': 'Scheduled', 'driverAssigned': 'Driver Assigned', 'driverArrived': 'Driver Arrived', 'inTransit': 'In Transit', 'delivered': 'Delivered', 'cancelled': 'Cancelled', 'noDriverFound': 'No Driver Found'};
+        r2[12] = r1;
+        r1 = {'finding': 'Finding a driver…', 'scheduled': 'Scheduled — we’ll start finding a driver near the pickup time.', 'accepted': 'Driver is on the way', 'arrived': 'Driver has arrived', 'inTransit': 'On the way to drop-off', 'delivered': 'Trip completed', 'noDriver': 'No driver available, please try again', 'cancelledByYou': 'Cancelled by you', 'cancelledByDriver': 'Cancelled by the driver', 'cancelledBySystem': 'Cancelled by the system', 'cancelled': 'Booking cancelled', 'withReason': '{{prefix}}: {{reason}}'};
+        r2[13] = r1;
+        r1 = {'verifiedLabel': 'Verified', 'verifiedDesc': 'Your account is verified — you’re all set to accept rides.', 'rejectedLabel': 'Rejected', 'rejectedDesc': 'Your verification was rejected. Please review and re-submit your documents.', 'pendingLabel': 'Under Review', 'pendingDesc': 'Your documents are under review. We’ll notify you once verification is complete.'};
+        r2[14] = r1;
+        r1 = {'startNavigation': 'Start Navigation', 'arrivedAtPickup': 'Arrived at Pickup', 'startTrip': 'Start Trip', 'arrivedAtDrop': 'Arrived at Drop', 'completeDelivery': 'Complete Delivery'};
+        r2[15] = r1;
+        r1 = {'toPickup': 'Driver is heading to pickup', 'atPickup': 'Driver has arrived at pickup', 'inTransit': 'Your cargo is on the way', 'atDrop': 'Driver has reached the drop point', 'delivered': 'Delivered 🎉', 'cancelled': 'Trip cancelled', 'tracking': 'Tracking your trip'};
+        r2[16] = r1;
+        r1 = {'title': 'Server address', 'subtitle': "Point the app at your backend. Paste your PC's current address. You can change it here any time your network IP changes — no reinstall needed.", 'backendAddress': 'Backend address', 'builtInDefault': 'Built-in default: {{host}}', 'currentlyUsing': 'Currently using: {{host}}', 'defaultSuffix': '{{host}} (default)', 'test': 'Test', 'resetToDefault': 'Reset to default', 'tip': 'Tip', 'tipBody': 'Enter just the core service (the one on port 3001). The booking (3002) and live-ops (3003) services are pointed at the same host automatically.', 'saved': 'Saved. The app now talks to {{host}}.', 'cleared': 'Cleared — using the built-in default address.', 'resetDone': 'Reset to the built-in default address.', 'testing': 'Testing {{target}}…', 'reachable': 'Reachable ✓  ({{target}})', 'notReachableDetail': 'Could not reach {{target}}. Check the address is right, the backend is running, and your phone is on the same network.'};
+        r2[17] = r1;
+        r1 = a4;
+        r1['exports'] = r2;
+        r0 = undefined;
+        return r0;
+    };
+    r9 = r11.bind(r5)(r9, r0, r10);
+    r11 = r8.__d;
+    r0 = 1351;
+    r10 = new Array(0);
+    r9 = function(a0, a1, a2, a3, a4, a5, a6) {
+        r2 = {'landing': null, 'tabs': null, 'login': null, 'signup': null, 'forgotPassword': null, 'serverSettings': null, 'booking': null, 'profile': null, 'trips': null, 'trip': null, 'confirmRide': null, 'changePassword': null, 'chat': null, 'editProfile': null, 'notifications': null, 'searching': null, 'track': null, 'settings': null};
+        r1 = {'badge': 'All Over India Transport', 'roleBadge': 'Shipper', 'headline': 'Ship with', 'headlineAccent': 'Confidence.', 'subtitle': 'Real-time tracking, optimized routing, and a reliable fleet across India.', 'featureTracking': 'Live Tracking', 'featureRoutes': 'Smart Routes', 'featureFleet': 'Trusted Fleet', 'getStarted': 'Get Started'};
+        r2[0] = r1;
+        r1 = {'home': 'Home', 'bookings': 'Bookings', 'profile': 'Profile'};
+        r2[1] = r1;
+        r1 = {'heroTitle': 'Partner Portal', 'heroSubtitle': 'Access your dashboard to manage cargo and routes.', 'phoneLabel': 'Phone Number', 'phonePlaceholder': '+91 98765 43210', 'passwordLabel': 'Password', 'passwordPlaceholder': 'Your password', 'otpLabel': 'Verification Code', 'otpPlaceholder': 'Enter 6-digit code', 'enterPassword': 'Enter your password', 'rememberMe': 'Remember me', 'forgotPassword': 'Forgot Password?', 'sendOtp': 'Send OTP', 'verifyLogin': 'Verify & Login', 'or': 'OR', 'loginWithOtp': 'Login with OTP', 'loginWithPassword': 'Login with Password', 'needAccount': 'Need an account?', 'signUp': 'Sign up'};
+        r2[2] = r1;
+        r1 = {'heroTitle': 'Drive your business forward with TruckGo.', 'featureTracking': 'Real-time GPS tracking for every asset', 'featureRouting': 'Automated routing and dispatching', 'featureSupport': '24/7 dedicated support desk', 'createAccount': 'Create Account', 'fullNameLabel': 'Full Name', 'fullNamePlaceholder': 'John Doe', 'companyNameLabel': 'Company Name', 'companyNamePlaceholder': 'Logistics Corp Inc.', 'emailLabel': 'Email Address', 'emailPlaceholder': 'john@company.com', 'phoneLabel': 'Phone Number', 'phonePlaceholder': '+91 98765 43210', 'passwordLabel': 'Password', 'passwordPlaceholder': 'At least 8 characters', 'confirmPasswordLabel': 'Confirm Password', 'confirmPasswordPlaceholder': 'Re-enter password', 'agreePrefix': 'I agree to the', 'termsOfService': 'Terms of Service', 'and': 'and', 'privacyPolicy': 'Privacy Policy', 'acceptTermsError': 'Please accept the Terms of Service and Privacy Policy', 'registrationFailed': 'Registration failed. Please try again.', 'haveAccount': 'Already have an account?', 'loginHere': 'Login here'};
+        r2[3] = r1;
+        r1 = {'title': 'Reset Password', 'heading': 'Forgot your password?', 'subtitle': 'Enter your phone number and we’ll send you a reset code.', 'sentSubtitle': 'Enter the code we sent and choose a new password.', 'phoneLabel': 'Phone Number', 'phonePlaceholder': '+91 98765 43210', 'codeLabel': 'Reset Code', 'codePlaceholder': 'Enter the code', 'newPasswordLabel': 'New Password', 'newPasswordPlaceholder': 'At least 8 characters', 'confirmPasswordLabel': 'Confirm Password', 'confirmPasswordPlaceholder': 'Re-enter new password', 'sendCode': 'Send Reset Code', 'useDifferentNumber': 'Use a different number'};
+        r2[4] = r1;
+        r1 = {'title': 'Server Settings'};
+        r2[5] = r1;
+        r1 = {'pickup': 'Pickup', 'drop': 'Drop-off', 'seeTrucks': 'See available trucks', 'selectRide': 'Select your ride', 'estFare': 'Est. fare', 'weightTitle': 'Select the weight of your goods', 'unknownWeight': "I don't know my material weight", 'book': 'Book {{vehicle}}', 'myLocation': 'My current location', 'pickupPlaceholder': 'Pickup location', 'dropPlaceholder': 'Where are you dropping off?', 'useMyLocation': 'Use my current location', 'enterBoth': 'Enter pickup & drop-off'};
+        r2[6] = r1;
+        r1 = {'defaultName': 'TruckGo User', 'shipments': 'Shipments', 'account': 'Account', 'personalInfo': 'Personal Information', 'changePassword': 'Change Password', 'notifications': 'Notifications', 'preferences': 'Preferences', 'signOut': 'Sign Out'};
+        r2[7] = r1;
+        r1 = {'title': 'Trip History', 'searchPlaceholder': 'Search by Shipment ID...', 'filterAll': 'All', 'filterActive': 'Active', 'loadError': 'Could not load your trips.', 'shipmentId': 'Shipment ID', 'from': 'From', 'to': 'To', 'dateAndTime': 'Date & Time', 'vehicle': 'Vehicle', 'totalFare': 'Total Fare', 'reason': 'Reason', 'liveTracking': 'Live Tracking', 'viewTrip': 'View Trip', 'newBooking': 'New Booking', 'noTrips': 'No trips yet — book your first shipment!', 'noMatches': 'No trips match your search.', 'dateTime': '{{month}} {{day}}, {{year}} • {{hours}}:{{minutes}} {{ampm}}', 'am': 'AM', 'pm': 'PM', 'months': null, 'vehicles': null};
+        r3 = {'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr', 'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug', 'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'};
+        r1[20] = r3;
+        r3 = {'miniTruck': 'Mini Truck', 'pickup': 'Pickup', 'tataAce': 'Tata Ace', 'tempo': 'Tempo', 'largeTruck': 'Large Truck', 'container': 'Container'};
+        r1[21] = r3;
+        r2[8] = r1;
+        r1 = {'arrivingIn': 'Arriving in ~{{minutes}} min', 'yourDriver': 'Your driver', 'messageDriver': 'Message {{name}}', 'cancelRide': 'Cancel ride', 'freeFor': 'Free for {{time}}', 'contactSupport': 'Contact support to cancel', 'rideCancelled': 'Ride cancelled', 'bookAgain': 'Book again'};
+        r2[9] = r1;
+        r1 = {'vehicles': null, 'weightError': 'Enter a weight between 0 and {{max}} tons.', 'cantResolvePickup': 'Couldn’t resolve the pickup address. Go back and enter a more specific one.', 'cantResolveDrop': 'Couldn’t resolve the drop-off address. Go back and enter a more specific one.', 'faresError': 'Could not load fares. Please go back and try again.', 'createError': 'Could not create the booking. Please try again.', 'routePreview': 'ROUTE PREVIEW', 'resolvingRoute': 'Resolving pickup & drop-off…', 'ton': 'ton', 'tonAmount': '{{tons}} ton', 'tonsShort': '{{tons}} t', 'tonsLoad': '{{tons}} t load', 'goodsTypeLabel': 'Goods type', 'goodsTypePlaceholder': 'What are you transporting? (optional)', 'addWeight': 'Add weight', 'weight': 'Weight', 'submit': 'Submit', 'notesPlaceholder': 'Notes for the driver (optional)', 'durationMin_one': '{{count}} min', 'durationMin_other': '{{count}} min', 'loadingFares': 'Loading fares…', 'bookRide': 'Book ride'};
+        r3 = {'miniTruck': null, 'tataAce': null, 'pickup': null, 'tempo': null, 'largeTruck': null, 'container': null};
+        r4 = {'name': 'Mini Truck', 'capacity': 'Up to 2 tons'};
+        r3[0] = r4;
+        r4 = {'name': 'Tata Ace', 'capacity': 'Up to 1 ton'};
+        r3[1] = r4;
+        r4 = {'name': 'Pickup', 'capacity': '1–2 tons'};
+        r3[2] = r4;
+        r4 = {'name': 'Tempo', 'capacity': '2–8 tons'};
+        r3[3] = r4;
+        r4 = {'name': 'Large Truck', 'capacity': '8+ tons'};
+        r3[4] = r4;
+        r4 = {'name': 'Container', 'capacity': 'Enclosed cargo'};
+        r3[5] = r4;
+        r1[0] = r3;
+        r2[10] = r1;
+        r1 = {'title': 'Change Password', 'intro': 'Choose a strong password of at least 8 characters.', 'currentLabel': 'Current Password', 'currentPlaceholder': 'Leave blank if you use OTP login', 'currentHint': 'If you’ve never set a password (OTP-only account), leave this empty.', 'newLabel': 'New Password', 'newPlaceholder': 'At least 8 characters', 'confirmLabel': 'Confirm New Password', 'confirmPlaceholder': 'Re-enter new password', 'submit': 'Update Password'};

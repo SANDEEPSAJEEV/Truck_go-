@@ -1,0 +1,447 @@
+// TruckGo backend schema — PostgreSQL.
+//
+// Deliberately Postgres in every environment, including local development. SQLite was fine
+// for a prototype but differs from production in ways that hide bugs until they matter:
+// no native enums, no Decimal, no concurrent writers, different null/collation behaviour.
+// Developing against the same engine that runs in production is the point.
+//
+// Environments are separate DATABASE_URLs pointing at separate databases (see .env.example):
+// a mistake in development cannot reach production data because it has no route to it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  DRIVER
+  ADMIN
+}
+
+// Purpose is part of the lookup key so a code minted to reset a password can never be
+// replayed to prove ownership of a phone number during registration.
+enum OtpPurpose {
+  PHONE_VERIFICATION
+  PASSWORD_RESET
+  LOGIN
+}
+
+// Commercial goods carriage in India requires more than a licence: the vehicle needs a
+// valid registration certificate, insurance, a fitness certificate, and a goods permit.
+// Each is captured separately because each expires on its own schedule.
+enum DocumentType {
+  DRIVING_LICENSE
+  VEHICLE_RC
+  INSURANCE
+  FITNESS_CERTIFICATE
+  PERMIT
+  PAN
+  AADHAAR
+  PHOTO
+}
+
+enum VerificationStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+  SUSPENDED
+}
+
+// Confirmed from decompiled_driver.js:460539-460642 (bookingStatusMeta) plus the
+// finer-grained driver nextAction state machine (:460821-461010).
+// LOADING and UNLOADING, and AWAITING_BIDS, are additions to the recovered enum.
+// AWAITING_BIDS is the open-market window: a booking sits here while approved drivers can
+// bid on it, and only leaves this state when the rider accepts one bid (never by a driver
+// unilaterally claiming it — that would defeat the point of letting the rider choose).
+// LOADING and UNLOADING exist because custody of the goods changes hands three times — at
+// pickup, at departure, and at delivery — and each hand-off is gated by a PIN the rider holds.
+enum BookingStatus {
+  REQUESTED
+  AWAITING_BIDS
+  ACCEPTED
+  EN_ROUTE_TO_PICKUP
+  ARRIVED_AT_PICKUP
+  LOADING
+  IN_TRANSIT
+  ARRIVED_AT_DROP
+  UNLOADING
+  DELIVERED
+  CANCELLED
+  NO_DRIVER_FOUND
+  REJECTED
+}
+
+// Confirmed camelCase values from the vehicle-name i18n map, decompiled_user.js ~403688-403694.
+enum VehicleType {
+  miniTruck
+  pickup
+  tataAce
+  tempo
+  largeTruck
+  container
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id               String    @id @default(cuid())
+  role             Role
+  fullName         String    @db.VarChar(120)
+  // Stored as digits only (see phoneSchema in auth.routes.ts) so the same person cannot
+  // register twice as "+919876543210" and "9876543210".
+  phone            String    @unique @db.VarChar(20)
+  email            String?   @unique @db.VarChar(254)
+  passwordHash     String
+  avatarUrl        String?
+  companyName      String?   @db.VarChar(160)
+  // Set only after a real OTP challenge is consumed. Registration requires it, so a phone
+  // number can no longer be claimed by simply typing it.
+  phoneVerifiedAt  DateTime?
+  // Failed-login throttling, so a password cannot be brute-forced indefinitely.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  driverProfile DriverProfile?
+
+  bookingsAsUser   Booking[] @relation("BookingUser")
+  bookingsAsDriver Booking[] @relation("BookingDriver")
+
+  ratingsGiven    Rating[]       @relation("RatingFrom")
+  ratingsReceived Rating[]       @relation("RatingTo")
+  notifications   Notification[]
+  messages        Message[]
+  refreshTokens   RefreshToken[]
+  bidsPlaced      Bid[]          @relation("BidDriver")
+  devices         Device[]
+
+  @@index([role])
+}
+
+model DriverProfile {
+  id                          String      @id @default(cuid())
+  userId                      String      @unique
+  user                        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleType                 VehicleType
+  vehicleNumber               String      @db.VarChar(20)
+  drivingLicenseNumber        String      @db.VarChar(24)
+  panCardNumber               String?     @db.VarChar(10)
+  // Confirmed field names, decompiled_driver.js:422407+ (registerDriver FormData).
+  // Bank details are collected at registration, not a later settings screen.
+  accountHolderName           String?     @db.VarChar(120)
+  bankAccountNumber           String?     @db.VarChar(20)
+  ifscCode                    String?     @db.VarChar(11)
+  // KYC document images — superseded by the DriverDocument table, kept for the fields the
+  // original app collected. See reference/UNKNOWNS-AND-ASSUMPTIONS.md.
+  panCardImageUrl             String?
+  drivingLicenseFrontImageUrl String?
+  drivingLicenseBackImageUrl  String?
+  isOnline                    Boolean     @default(false)
+  currentLat                  Float?
+  currentLng                  Float?
+  locationAt                  DateTime?
+  ratingAvg                   Float       @default(0)
+  ratingCount                 Int         @default(0)
+  createdAt                   DateTime    @default(now())
+
+  // A driver is carrying someone else's cargo, so nothing goes live on trust. Until this
+  // reads APPROVED the driver cannot go online or bid — enforced in middleware, not by
+  // hiding a button.
+  verificationStatus VerificationStatus @default(PENDING)
+  approvedAt         DateTime?
+  approvedBy         String?
+  rejectionReason    String?
+
+  documents DriverDocument[]
+
+  // Dispatch asks "who is online AND approved" on every driver-feed poll.
+  @@index([isOnline, verificationStatus])
+  // The admin review queue filters on status.
+  @@index([verificationStatus])
+}
+
+model DriverDocument {
+  id       String        @id @default(cuid())
+  driverId String
+  driver   DriverProfile @relation(fields: [driverId], references: [userId], onDelete: Cascade)
+
+  type    DocumentType
+  number  String?      @db.VarChar(32)
+  // Where the scan/photo lives. Served through an authenticated route, never as a public URL.
+  fileKey String?
+
+  // Expiry is a first-class field: insurance, fitness and permits lapse, and a driver whose
+  // cover has run out must stop being dispatchable without anyone having to notice manually.
+  issuedAt  DateTime?
+  expiresAt DateTime?
+
+  status VerificationStatus @default(PENDING)
+
+  // Audit trail. providerRef is the vendor's check id and providerData the raw response,
+  // both retained as evidence of why a driver was cleared. Json rather than a string blob
+  // so it stays queryable.
+  providerRef     String?
+  providerData    Json?
+  verifiedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([driverId, type])
+  @@index([status])
+  // The daily expiry sweep scans for APPROVED documents past their date.
+  @@index([expiresAt, status])
+}
+
+model Booking {
+  id        String @id @default(cuid())
+  // Short, human-readable handle shown in the app and quoted in support ("TRK-4F2A91").
+  // cuids are unguessable but unusable in conversation or a search box.
+  reference String @unique @db.VarChar(16)
+
+  userId   String
+  user     User    @relation("BookingUser", fields: [userId], references: [id])
+  driverId String?
+  driver   User?   @relation("BookingDriver", fields: [driverId], references: [id])
+
+  pickupAddress String
+  pickupLat     Float
+  pickupLng     Float
+  pickupPlaceId String?
+  dropAddress   String
+  dropLat       Float
+  dropLng       Float
+  dropPlaceId   String?
+  vehicleType   VehicleType
+
+  weightTons Float?
+  notes      String?
+  goodsType  String? @db.VarChar(120)
+
+  distanceKm  Float?
+  durationMin Float?
+
+  // Money is Decimal, never Float. Binary floating point cannot represent most decimal
+  // fractions exactly, so fares drift by fractions of a paisa and those errors accumulate
+  // when summing a driver's earnings or reconciling a payout.
+  estimatedFare Decimal? @db.Decimal(10, 2)
+  actualFare    Decimal? @db.Decimal(10, 2)
+
+  // The road route, fetched once at booking rather than recomputed on every GPS tick —
+  // routing is billed per call, so a naive per-tick implementation gets expensive fast.
+  routePolyline String?
+  routeProvider String? @db.VarChar(32)
+
+  status             BookingStatus @default(REQUESTED)
+  // Three separate custody gates, each held by the rider and read out to the driver:
+  // pickupOtp proves the right driver arrived, startOtp proves loading finished with the
+  // rider's agreement, dropOtp proves the consignee authorised unloading. Each is cleared
+  // once consumed so a code can never be replayed at a later stage.
+  pickupOtp          String?       @db.VarChar(8)
+  startOtp           String?       @db.VarChar(8)
+  dropOtp            String?       @db.VarChar(8)
+  cancellationReason String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  acceptedAt    DateTime?
+  enRouteAt     DateTime?
+  arrivedAt     DateTime?
+  loadingAt     DateTime?
+  startedAt     DateTime?
+  arrivedDropAt DateTime?
+  unloadingAt   DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  ratings  Rating[]
+  messages Message[]
+  bids     Bid[]     @relation("BidBooking")
+  payment  Payment?
+
+  // The driver feed reads open bookings newest-first.
+  @@index([status, createdAt])
+  // Trip history, per side.
+  @@index([userId, createdAt])
+  @@index([driverId, createdAt])
+}
+
+model Bid {
+  id        String    @id @default(cuid())
+  bookingId String
+  booking   Booking   @relation("BidBooking", fields: [bookingId], references: [id], onDelete: Cascade)
+  driverId  String
+  driver    User      @relation("BidDriver", fields: [driverId], references: [id], onDelete: Cascade)
+  amount    Decimal   @db.Decimal(10, 2)
+  status    BidStatus @default(PENDING)
+  note      String?   @db.VarChar(280)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // One row per driver per booking, ever — a driver who withdraws and re-bids updates this
+  // same row rather than creating a second, so the unique constraint can't be worked around
+  // by withdraw-then-rebid spam.
+  @@unique([bookingId, driverId])
+  @@index([bookingId, status])
+  @@index([driverId, status])
+}
+
+// One payment per booking — a rider pays once, for the agreed fare, after delivery.
+// `status` is only ever written by the verified gateway webhook (see
+// backend/src/routes/payments.routes.ts); nothing else in this system is allowed to mark a
+// payment PAID, because a client claiming "I paid" is not evidence that it happened.
+model Payment {
+  id        String  @id @default(cuid())
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  amount   Decimal @db.Decimal(10, 2)
+  currency String  @default("INR") @db.VarChar(3)
+
+  // Razorpay's own identifiers, so a payment can be reconciled against their dashboard
+  // without cross-referencing anything else.
+  gatewayOrderId   String? @unique
+  gatewayPaymentId String? @unique
+
+  status PaymentStatus @default(PENDING)
+  paidAt DateTime?
+
+  // Raw gateway payload for the event that last changed this row — an audit trail for
+  // disputing a chargeback or debugging a webhook that behaved unexpectedly.
+  gatewayData Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromUserId String
+  fromUser   User     @relation("RatingFrom", fields: [fromUserId], references: [id])
+  toUserId   String
+  toUser     User     @relation("RatingTo", fields: [toUserId], references: [id])
+  stars      Int      @db.SmallInt
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  // One rating per person per booking — without this the same trip could be rated
+  // repeatedly to inflate or tank someone's average.
+  @@unique([bookingId, fromUserId])
+  @@index([toUserId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(160)
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Nullable so every row written before dispatch existed stays valid. Without these a
+  // notification is a dead end: the driver reads "New load nearby" and has nothing to tap.
+  type      String?  @db.VarChar(40)
+  bookingId String?
+  data      Json?
+
+  // The bell badge counts unread per user; the list reads newest-first.
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+/// One row per install that has granted notification permission.
+///
+/// Keyed by the Expo push token rather than the user, because a driver may carry a phone
+/// and a tablet, and because a token migrates between users when a device is handed over —
+/// the unique constraint is what stops the previous owner's loads following the hardware.
+model Device {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expoPushToken String   @unique @db.VarChar(200)
+  platform      String   @db.VarChar(16)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+}
+
+// Rotating refresh tokens with theft detection. Every refresh mints a new token in the
+// same `familyId` and marks the old one rotated. Presenting an already-rotated token is
+// the classic signal that a token was stolen and replayed, so the whole family is revoked
+// and the session ends — the legitimate holder and the thief both get logged out, which is
+// the correct outcome.
+//
+// Only a SHA-256 hash is stored: a leaked database dump must not hand over usable sessions.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  rotatedAt DateTime?
+  revokedAt DateTime?
+
+  @@index([familyId])
+  @@index([userId])
+  // Lets expired rows be swept without a full scan.
+  @@index([expiresAt])
+}
+
+// Replaces the in-memory Map, which lost every pending code on restart, could not work
+// across more than one server instance, and grew without bound.
+model OtpChallenge {
+  id           String     @id @default(cuid())
+  phone        String     @db.VarChar(20)
+  purpose      OtpPurpose
+  codeHash     String
+  attemptCount Int        @default(0)
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime   @default(now())
+
+  // The live-challenge lookup is (phone, purpose, not consumed, newest first).
+  @@index([phone, purpose, createdAt])
+  @@index([expiresAt])
+}

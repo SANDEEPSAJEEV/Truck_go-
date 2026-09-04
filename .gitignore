@@ -1,0 +1,58 @@
+# Secrets. These hold the Neon database password, Razorpay keys and Google Maps keys —
+# nothing in here is ever committed. `.env.example` files are tracked instead.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-web/
+build/
+*.tsbuildinfo
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Prisma generated client
+**/node_modules/.prisma/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local artifacts
+*.apk
+*.aab
+coverage/
+
+# Decompiled output from the original APKs. Excluded on two counts: it is ~44MB of
+# generated artifacts that would bloat every clone, and it is decompiled third-party
+# application code, which is not ours to republish. The written analysis derived from it
+# (reference/*.md) is kept — that part is our own work.
+_inspect/
+reference/decompiled/
+*.android.bundle
+
+# Windows shell accident
+nul

@@ -1,0 +1,49 @@
+{
+  "cli": {
+    "version": ">= 5.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "demo": {
+      "distribution": "internal",
+      // Without this every build ships the same versionCode and Android refuses to
+      // reinstall over the copy already on the phone ("App not installed").
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      // Pulls GOOGLE_MAPS_ANDROID_KEY from the development environment. Without an
+      // environment the key is never injected, app.config.js emits no maps block, and the
+      // dashboard — which is now a full-bleed map — ships blank.
+      //
+      // `development` rather than `preview` on purpose: preview also carries
+      // EXPO_PUBLIC_DEMO=0 and an API URL, which would fight the demo flag below.
+      "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_DEMO": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

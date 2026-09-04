@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "truckgo-user-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/user", "run", "web"],
+      "port": 8081
+    },
+    {
+      "name": "truckgo-driver-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/driver", "run", "web"],
+      "port": 8082
+    }
+  ]
+}
