@@ -54,30 +54,8 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
     throw new SessionError("INVALID_SIGNATURE");
   }
 
-  // Reaching here means the JWT is genuinely ours, so a missing row is not the caller's
-  // fault — and it may not even be true. A refresh fired moments after a login can run
-  // before that login's own INSERT is visible to this query; measured against the deployed
-  // database, a token left to age ten seconds was accepted 8 times out of 8, while one used
-  // immediately after login failed roughly one time in three and succeeded on a retry.
-  //
-  // The cost of getting this wrong is not a retry, it is a logout: both apps call
-  // `clearTokens()` when a refresh comes back 401. Only a miss pays the wait, and the
-  // overwhelming majority of refreshes are for tokens minted long ago.
-  const tokenHash = hashToken(presentedToken);
-  let stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  let waitedMs = 0;
-  for (const backoffMs of [250, 500, 1000, 1500, 2750]) {
-    if (stored) break;
-    await new Promise((resolve) => setTimeout(resolve, backoffMs));
-    waitedMs += backoffMs;
-    stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  }
+  const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(presentedToken) } });
   if (!stored) throw new SessionError("NOT_FOUND");
-  if (waitedMs > 0) {
-    // Logged rather than silent: if this starts happening often, or the wait creeps up, that
-    // is a storage problem worth knowing about rather than one permanently papered over.
-    console.warn(`[sessions] refresh token row appeared only after ${waitedMs}ms`);
-  }
 
   if (stored.rotatedAt || stored.revokedAt) {
     await revokeFamily(stored.familyId);

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 // Previously these fell back to hardcoded strings. That meant a deploy which forgot to set
@@ -25,8 +26,17 @@ export function signAccessToken(payload: AccessTokenPayload) {
   return jwt.sign(payload, ACCESS_SECRET, { expiresIn: "15m" });
 }
 
+/**
+ * `jti` is what makes every refresh token a distinct string.
+ *
+ * Without it the payload is {sub, role, familyId, iat, exp}, and `iat` has one-second
+ * resolution — so rotating a token in the same second it was issued produced a byte-identical
+ * JWT. Identical token, identical hash, and the insert then collided with the row it was
+ * meant to replace. It surfaced as a crash on exactly the sequence a person produces by
+ * signing in on a second device or double-tapping the login button.
+ */
 export function signRefreshToken(payload: AccessTokenPayload & { familyId: string }) {
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ ...payload, jti: crypto.randomUUID() }, REFRESH_SECRET, { expiresIn: "30d" });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
