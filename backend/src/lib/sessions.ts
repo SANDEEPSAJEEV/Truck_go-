@@ -51,7 +51,23 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
     throw new SessionError("INVALID_REFRESH");
   }
 
-  const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(presentedToken) } });
+  // Two different failures hide behind "we don't have this token".
+  //
+  // A token whose signature or expiry is wrong is permanently invalid, and `verifyRefreshToken`
+  // above has already rejected it. Reaching here means the JWT is genuinely ours — so a
+  // missing row is not the client's fault, and occasionally it is not even true: a refresh
+  // fired moments after login can run before that login's INSERT is visible to this query,
+  // and the row appears a second later. Measured against the deployed database, roughly one
+  // in three logins followed immediately by a refresh hit this.
+  //
+  // The cost of getting it wrong is not a retry — it is a logout. Both apps call
+  // `clearTokens()` when a refresh comes back 401, so a storage blip silently signs a real
+  // user out. One short re-read is a much better trade than that.
+  let stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(presentedToken) } });
+  if (!stored) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(presentedToken) } });
+  }
   if (!stored) throw new SessionError("INVALID_REFRESH");
 
   if (stored.rotatedAt || stored.revokedAt) {

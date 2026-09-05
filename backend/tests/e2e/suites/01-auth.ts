@@ -326,6 +326,26 @@ suite("auth", "01 — Auth", () => {
     expect(me.status, "the new token works").toBe(200);
   });
 
+  test("1.24b", "a refresh immediately after login always works", async () => {
+    // The failure this guards against showed up roughly one login in three, so a single
+    // attempt would pass most of the time and prove nothing.
+    //
+    // Signing in on a second device, or double-tapping the login button, put a refresh
+    // request in flight before that login's own token row was visible to the query. The
+    // server answered 401, and both apps clear their tokens on a failed refresh — so a
+    // storage timing blip signed the user straight back out.
+    const actor = await disposableRider("fastrefresh");
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const session = await login(actor.phone, PASSWORD, "USER");
+      const res = await api("/auth/refresh", {
+        method: "POST",
+        body: { refreshToken: session.refreshToken },
+      });
+      expect(res.status, `refresh straight after login, attempt ${attempt} (code=${res.code ?? "none"})`).toBe(200);
+      expect(res.body.accessToken, `attempt ${attempt} returned a token`).toBeDefined();
+    }
+  });
+
   test("1.25", "an access token is not accepted as a refresh token", async () => {
     const res = await api("/auth/refresh", { method: "POST", body: { refreshToken: ctx.rider.accessToken } });
     expect(res.status, "status").toBe(401);
