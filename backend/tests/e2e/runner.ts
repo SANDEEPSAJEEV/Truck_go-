@@ -200,7 +200,13 @@ export async function runSuites(only?: string[]): Promise<Result[]> {
       const timing = ms > 2000 ? ` ${DIM}${(ms / 1000).toFixed(1)}s${OFF}` : "";
       console.log(`  ${MARK[outcome]} ${DIM}${c.id}${OFF} ${c.name}${timing}`);
       if (outcome === "fail") console.log(`      ${RED}${error}${OFF}`);
-      if (outcome === "confirmed") console.log(`      ${YELLOW}known: ${c.known}${OFF}`);
+      if (outcome === "confirmed") {
+        // The assertion matters as much here as on a plain failure: a known case can break
+        // for a reason that has nothing to do with the defect it was written against, and
+        // printing only the expected reason would hide that completely.
+        console.log(`      ${YELLOW}known: ${c.known}${OFF}`);
+        console.log(`      ${DIM}${error}${OFF}`);
+      }
       if (outcome === "fixed") console.log(`      ${CYAN}now passing — was: ${c.known}${OFF}`);
     }
   }

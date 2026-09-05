@@ -37,12 +37,14 @@ suite("negative", "14 — Negative, validation & resilience", () => {
       ["/auth/register/driver", "POST", ""],
       ["/bookings/estimate", "POST", ctx.rider.accessToken],
       ["/bookings", "POST", ctx.rider.accessToken],
-      ["/drivers/location", "PUT", ctx.driverA.accessToken],
       ["/drivers/bank-details", "PUT", ctx.driverA.accessToken],
       ["/ratings", "POST", ctx.rider.accessToken],
       ["/devices/register", "POST", ctx.driverA.accessToken],
     ];
 
+    // PUT /drivers/location is deliberately absent: every field on it is optional, because
+    // going offline must work with no GPS fix at all. An empty body there is a valid no-op,
+    // not a validation failure.
     for (const [path, method, token] of cases) {
       const res = await api(path, { method, token: token || undefined, body: {} });
       expect(res.status, `status for ${method} ${path}`).toBe(400);

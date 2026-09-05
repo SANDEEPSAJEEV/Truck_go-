@@ -421,10 +421,22 @@ bookingsRouter.post("/:id/bids/:bidId/accept", requireAuth, requireRole("USER"),
         throw new RouteError(409, "NOT_AVAILABLE", "That bid was withdrawn or already handled.");
       }
 
-      const updated = await tx.booking.update({
-        where: { id: booking.id },
+      // Conditional on the status, not just on the read above.
+      //
+      // Postgres runs at READ COMMITTED by default, so two accepts arriving together both
+      // read AWAITING_BIDS before either writes: the second blocks on the row lock, then
+      // proceeds on what it read a moment ago and overwrites the first. Both callers get a
+      // 200, two drivers are told they won, and the loser-rejection sweep marks the real
+      // winner's bid REJECTED. Re-checking the status inside the UPDATE is what makes the
+      // race impossible rather than merely unlikely — the second one matches no rows.
+      const claimed = await tx.booking.updateMany({
+        where: { id: booking.id, status: "AWAITING_BIDS" },
         data: { driverId: bid.driverId, actualFare: bid.amount, status: "ACCEPTED", acceptedAt: new Date() },
       });
+      if (claimed.count === 0) {
+        throw new RouteError(409, "NOT_OPEN", "This booking is no longer open for bids.");
+      }
+      const updated = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
 
       await tx.bid.update({ where: { id: bid.id }, data: { status: "ACCEPTED" } });
       const losers = await tx.bid.findMany({

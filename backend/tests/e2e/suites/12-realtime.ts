@@ -210,7 +210,9 @@ suite("realtime", "12 — Realtime", () => {
           method: "POST",
           token: ctx.rider.accessToken,
         });
-        await bystander.expectSilence("load:taken", 5000);
+        // Filtered to this booking. An unfiltered wait picks up load:taken for unrelated
+        // bookings still settling from earlier suites and fails for the wrong reason.
+        await bystander.expectSilence("load:taken", 5000, (p) => p.bookingId === booking.id);
       } finally {
         bystander.close();
       }

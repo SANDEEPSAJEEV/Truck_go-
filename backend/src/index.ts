@@ -94,6 +94,26 @@ app.use((_req, res) => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // A body express itself rejected is the client's problem, not ours, and answering 500 to
+  // it is actively misleading: both apps read `error.code` to decide what to tell the user,
+  // and a 500 turns "that request was too large" into "something went wrong" — the one
+  // message that tells nobody anything and invites an endless retry.
+  if (err?.type === "entity.too.large" || err?.status === 413) {
+    return res
+      .status(413)
+      .json({ error: { code: "PAYLOAD_TOO_LARGE", message: "That request was too large." } });
+  }
+  if (err instanceof SyntaxError && "body" in err) {
+    return res
+      .status(400)
+      .json({ error: { code: "MALFORMED_BODY", message: "The request body was not valid JSON." } });
+  }
+  if (err?.type === "encoding.unsupported" || err?.type === "charset.unsupported") {
+    return res
+      .status(400)
+      .json({ error: { code: "UNSUPPORTED_ENCODING", message: "Unsupported request encoding." } });
+  }
+
   console.error(err);
   res.status(500).json({ error: { code: "INTERNAL", message: "Something went wrong" } });
 });
