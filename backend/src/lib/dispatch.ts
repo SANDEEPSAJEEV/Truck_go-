@@ -3,6 +3,7 @@ import type { Booking } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getIo } from "../sockets/io";
 import { getPushProvider } from "./push";
+import { toAmount } from "./money";
 
 /**
  * Who gets told about a new load, and how.
@@ -105,11 +106,17 @@ export async function dispatchBooking(booking: Booking, radiusKm: number): Promi
     dropAddress: booking.dropAddress,
     vehicleType: booking.vehicleType,
     distanceKm: booking.distanceKm,
-    estimatedFare: booking.estimatedFare,
+    // A Prisma Decimal serialises to a JSON *string* over the socket. The driver's load
+    // popup posts this value straight back as a bid amount, where the schema requires a
+    // number — so sending the raw Decimal made every Accept on that popup fail validation,
+    // and the popup's catch-all swallowed the error so it looked like it had worked.
+    estimatedFare: toAmount(booking.estimatedFare),
   };
 
   // getIo() throws before the server is wired up (and in unit tests), which must never
   // turn into a failed booking.
+  rememberDispatch(booking.id, drivers.map((d) => d.userId));
+
   try {
     const io = getIo();
     for (const d of drivers) io.to(`user:${d.userId}`).emit("load:new", payload);
@@ -157,15 +164,46 @@ export async function dispatchBooking(booking: Booking, radiusKm: number): Promi
 }
 
 /**
- * Tell every driver a load is gone.
+ * Remembers who a booking was offered to, so it can be withdrawn from exactly those drivers.
  *
- * Broadcast rather than targeted: the set of drivers notified at dispatch time isn't
- * recorded, and a stale card that can never be bid on is worse than a redundant event.
+ * In memory rather than a table: it is only needed between a dispatch and the moment the load
+ * is taken, it is rebuilt from the notification rows if the process restarts, and a booking
+ * that outlives the entry falls back to the same query.
  */
-export function dispatchLoadTaken(bookingId: string): void {
+const dispatchedTo = new Map<string, Set<string>>();
+
+function rememberDispatch(bookingId: string, userIds: string[]): void {
+  const existing = dispatchedTo.get(bookingId) ?? new Set<string>();
+  for (const id of userIds) existing.add(id);
+  dispatchedTo.set(bookingId, existing);
+}
+
+/**
+ * Tell the drivers who were offered this load that it is gone, so it leaves their sheet and
+ * their Rides list.
+ *
+ * Previously a global `io.emit`, which reached every connected socket — including every rider,
+ * none of whom have a load board. That handed anyone with an account a live feed of every
+ * booking id in the system as it was taken.
+ */
+export async function dispatchLoadTaken(bookingId: string): Promise<void> {
   try {
-    getIo().emit("load:taken", { bookingId });
+    const io = getIo();
+    let recipients = dispatchedTo.get(bookingId);
+
+    // Rebuilt from the durable notification rows when this process didn't do the dispatch
+    // (a restart, or a re-dispatch handled by another instance).
+    if (!recipients || recipients.size === 0) {
+      const rows = await prisma.notification.findMany({
+        where: { bookingId, type: "LOAD_NEW" },
+        select: { userId: true },
+      });
+      recipients = new Set(rows.map((r) => r.userId));
+    }
+
+    for (const userId of recipients) io.to(`user:${userId}`).emit("load:taken", { bookingId });
+    dispatchedTo.delete(bookingId);
   } catch (e) {
-    console.error("[dispatch] socket unavailable", e);
+    console.error("[dispatch] could not announce load:taken", e);
   }
 }

@@ -117,17 +117,40 @@ driversRouter.get("/earnings", requireAuth, requireRole("DRIVER"), async (req: A
 
 // Field names confirmed from the driver-registration multipart body,
 // decompiled_driver.js:422407+ — accountHolderName / bankAccountNumber / ifscCode.
+// Each field was previously a bare `z.string()`, which accepts "" — so a save with an empty
+// form silently wiped the account a driver gets paid into, and they'd only find out when a
+// payout failed.
 const bankDetailsSchema = z.object({
-  accountHolderName: z.string(),
-  bankAccountNumber: z.string(),
-  ifscCode: z.string(),
+  accountHolderName: z.string().trim().min(2, "Enter the account holder's name."),
+  bankAccountNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{9,18}$/, "Enter a valid bank account number.")
+    .optional(),
+  ifscCode: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v), "Enter a valid IFSC code, e.g. HDFC0001234."),
 });
+
+/** Last four digits only, which is what a person recognises their own account by. */
+function maskAccount(accountNumber: string | null): string | null {
+  if (!accountNumber) return null;
+  const tail = accountNumber.slice(-4);
+  return `${"•".repeat(Math.max(0, accountNumber.length - 4))}${tail}`;
+}
 
 driversRouter.get("/bank-details", requireAuth, requireRole("DRIVER"), async (req: AuthedRequest, res) => {
   const profile = await prisma.driverProfile.findUnique({ where: { userId: req.auth!.sub } });
   return res.json({
     accountHolderName: profile?.accountHolderName ?? null,
-    bankAccountNumber: profile?.bankAccountNumber ?? null,
+    // The driver's own screen promises "your saved account number is always shown masked",
+    // and it was returning the number in full. There is no reason to send it back: the
+    // driver already knows it, and anything that reads this response — a log, a crash
+    // report, a screenshot — no longer carries a payout account.
+    bankAccountNumber: maskAccount(profile?.bankAccountNumber ?? null),
+    hasBankAccountNumber: Boolean(profile?.bankAccountNumber),
     ifscCode: profile?.ifscCode ?? null,
   });
 });
@@ -135,8 +158,29 @@ driversRouter.get("/bank-details", requireAuth, requireRole("DRIVER"), async (re
 driversRouter.put("/bank-details", requireAuth, requireRole("DRIVER"), async (req: AuthedRequest, res) => {
   const parsed = bankDetailsSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: { code: "VALIDATION", message: parsed.error.message } });
+    return res.status(400).json({ error: { code: "VALIDATION", message: parsed.error.issues[0].message } });
   }
-  await prisma.driverProfile.update({ where: { userId: req.auth!.sub }, data: parsed.data });
+  const { accountHolderName, bankAccountNumber, ifscCode } = parsed.data;
+
+  const existing = await prisma.driverProfile.findUniqueOrThrow({
+    where: { userId: req.auth!.sub },
+    select: { bankAccountNumber: true },
+  });
+  // The number arrives masked when the driver edits their name or IFSC without retyping it,
+  // so an omitted or masked value means "leave it as it is" rather than "clear it".
+  if (!bankAccountNumber && !existing.bankAccountNumber) {
+    return res.status(400).json({
+      error: { code: "VALIDATION", message: "Enter a valid bank account number." },
+    });
+  }
+
+  await prisma.driverProfile.update({
+    where: { userId: req.auth!.sub },
+    data: {
+      accountHolderName,
+      ifscCode,
+      ...(bankAccountNumber ? { bankAccountNumber } : {}),
+    },
+  });
   return res.status(204).send();
 });

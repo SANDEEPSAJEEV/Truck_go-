@@ -260,9 +260,35 @@ function withOtpVisibility<T extends { userId: string } & Partial<OtpFields> & F
   return { ...normalised, pickupOtp: null, startOtp: null, dropOtp: null };
 }
 
+/**
+ * Whether this caller is one of the two parties on a booking.
+ *
+ * `requireAuth` proves who someone is; it does not make every booking theirs. A booking
+ * carries both addresses, the rider's movements, the agreed fare and both party ids — none of
+ * which is any other account's business. Booking ids are cuids and not enumerable, but an id
+ * is not a secret: it sits in URLs, in support threads, and in every client that has ever
+ * legitimately held one.
+ *
+ * An open booking is the one exception: any approved driver may read one to decide whether to
+ * bid, which is the entire point of an open market. `withOtpVisibility` still strips the
+ * custody PINs from anyone who is not the rider.
+ */
+function isPartyTo(
+  booking: { userId: string; driverId: string | null; status: BookingStatus },
+  auth: { sub: string; role: string },
+): boolean {
+  if (booking.userId === auth.sub) return true;
+  if (booking.driverId === auth.sub) return true;
+  if (auth.role === "ADMIN") return true;
+  return booking.status === "AWAITING_BIDS" && auth.role === "DRIVER";
+}
+
 bookingsRouter.get("/:id", requireAuth, async (req: AuthedRequest, res) => {
   const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
   if (!booking) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  if (!isPartyTo(booking, req.auth!)) {
+    return res.status(403).json({ error: { code: "FORBIDDEN", message: "Not your booking" } });
+  }
   return res.json({ booking: withOtpVisibility(booking, req.auth!.sub) });
 });
 
@@ -448,6 +474,16 @@ bookingsRouter.post("/:id/cancel", requireAuth, async (req: AuthedRequest, res) 
   const parsed = cancelSchema.safeParse(req.body ?? {});
   const existing = await prisma.booking.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  // Cancelling is destructive and irreversible. Only the rider who booked it, the driver
+  // carrying it, or an admin may do it — previously any authenticated account could cancel
+  // any booking in the system by id alone.
+  if (
+    existing.userId !== req.auth!.sub &&
+    existing.driverId !== req.auth!.sub &&
+    req.auth!.role !== "ADMIN"
+  ) {
+    return res.status(403).json({ error: { code: "FORBIDDEN", message: "Not your booking" } });
+  }
   if (TERMINAL_STATUSES.includes(existing.status)) {
     return res.status(409).json({ error: { code: "INVALID_STATE", message: "Booking already finished" } });
   }

@@ -43,6 +43,38 @@ async function issueStagePin(status: BookingStatus, riderId: string, riderPhone:
 // endpoint (decompiled_driver.js:462651-462695, `postStatus`).
 export const tripsRouter = Router();
 
+/**
+ * Loads a trip and confirms the caller is one of its two parties.
+ *
+ * Everything under /trips/:id describes one shipment: where the truck is right now, what stage
+ * the goods are at, what the two parties said to each other. `requireAuth` proves who the
+ * caller is and nothing more, so without this check any account could follow any trip by id —
+ * live GPS included. `GET /:id/eta` already did this; these routes did not, which is what made
+ * it an oversight rather than a policy.
+ *
+ * Returns the booking, or sends the response and returns null.
+ */
+async function loadTripFor(
+  req: AuthedRequest,
+  res: any,
+  include?: { driver: { include: { driverProfile: true } } },
+) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: req.params.id },
+    ...(include ? { include } : {}),
+  });
+  if (!booking) {
+    res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+    return null;
+  }
+  const auth = req.auth!;
+  if (booking.userId !== auth.sub && booking.driverId !== auth.sub && auth.role !== "ADMIN") {
+    res.status(403).json({ error: { code: "FORBIDDEN", message: "Not your trip" } });
+    return null;
+  }
+  return booking as any;
+}
+
 const statusSchema = z.object({
   status: z.nativeEnum(BookingStatus),
   lat: z.number().optional(),
@@ -179,11 +211,8 @@ tripsRouter.post("/:id/resend-otp", requireAuth, requireRole("USER"), async (req
 // REST fallback for the live map — the primary path is the `trip:subscribe` /
 // `trip:location` socket exchange in src/sockets/liveops.ts.
 tripsRouter.get("/:id/tracking", requireAuth, async (req: AuthedRequest, res) => {
-  const booking = await prisma.booking.findUnique({
-    where: { id: req.params.id },
-    include: { driver: { include: { driverProfile: true } } },
-  });
-  if (!booking) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  const booking = await loadTripFor(req, res, { driver: { include: { driverProfile: true } } });
+  if (!booking) return;
 
   return res.json({
     status: booking.status,
@@ -200,11 +229,8 @@ tripsRouter.get("/:id/tracking", requireAuth, async (req: AuthedRequest, res) =>
 // Confirmed endpoint, decompiled_user.js:461944 (getLastLocation) — narrower REST
 // fallback than /tracking, just the coordinates.
 tripsRouter.get("/:id/location", requireAuth, async (req: AuthedRequest, res) => {
-  const booking = await prisma.booking.findUnique({
-    where: { id: req.params.id },
-    include: { driver: { include: { driverProfile: true } } },
-  });
-  if (!booking) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  const booking = await loadTripFor(req, res, { driver: { include: { driverProfile: true } } });
+  if (!booking) return;
   const profile = booking.driver?.driverProfile;
   if (!profile?.currentLat || !profile?.currentLng) {
     return res.status(404).json({ error: { code: "NOT_FOUND", message: "No location yet" } });
@@ -287,8 +313,8 @@ tripsRouter.get("/:id/eta", requireAuth, async (req: AuthedRequest, res) => {
 const FREE_CANCELLATION_WINDOW_MS = 10 * 60_000;
 
 tripsRouter.get("/:id/cancellation-policy", requireAuth, async (req: AuthedRequest, res) => {
-  const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
-  if (!booking) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  const booking = await loadTripFor(req, res);
+  if (!booking) return;
   const windowEndsAt = new Date(booking.createdAt.getTime() + FREE_CANCELLATION_WINDOW_MS);
   const secondsRemaining = Math.max(0, Math.round((windowEndsAt.getTime() - Date.now()) / 1000));
   return res.json({ secondsRemaining, windowEndsAt: windowEndsAt.toISOString() });
@@ -301,8 +327,10 @@ const TRIP_TERMINAL_STATUSES = ["DELIVERED", "CANCELLED"];
 
 tripsRouter.post("/:id/cancel", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = tripCancelSchema.safeParse(req.body ?? {});
-  const existing = await prisma.booking.findUnique({ where: { id: req.params.id } });
-  if (!existing) return res.status(404).json({ error: { code: "NOT_FOUND", message: "Booking not found" } });
+  // Cancelling is destructive: previously any authenticated account could end any trip in
+  // the system knowing only its id.
+  const existing = await loadTripFor(req, res);
+  if (!existing) return;
   if (TRIP_TERMINAL_STATUSES.includes(existing.status)) {
     return res.status(409).json({ error: { code: "INVALID_STATE", message: "Booking already finished" } });
   }
@@ -321,6 +349,9 @@ tripsRouter.post("/:id/cancel", requireAuth, async (req: AuthedRequest, res) => 
 // Confirmed path, decompiled_user.js:463840 — chat lives under /trips/:id/messages,
 // not a query-param /messages?bookingId= as we first built it.
 tripsRouter.get("/:id/messages", requireAuth, async (req: AuthedRequest, res) => {
+  const booking = await loadTripFor(req, res);
+  if (!booking) return;
+
   const messages = await prisma.message.findMany({
     where: { bookingId: req.params.id },
     orderBy: { createdAt: "asc" },
@@ -328,18 +359,25 @@ tripsRouter.get("/:id/messages", requireAuth, async (req: AuthedRequest, res) =>
   return res.json({ messages });
 });
 
-tripsRouter.get("/:id/messages/unread-count", requireAuth, async (_req: AuthedRequest, res) => {
+tripsRouter.get("/:id/messages/unread-count", requireAuth, async (req: AuthedRequest, res) => {
+  const booking = await loadTripFor(req, res);
+  if (!booking) return;
   // Chat has no per-message read state yet — placeholder until that's tracked.
   return res.json({ count: 0 });
 });
 
-const sendMessageSchema = z.object({ text: z.string().min(1) });
+const sendMessageSchema = z.object({ text: z.string().trim().min(1).max(2000) });
 
 tripsRouter.post("/:id/messages", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: { code: "VALIDATION", message: parsed.error.message } });
+    return res.status(400).json({ error: { code: "VALIDATION", message: parsed.error.issues[0].message } });
   }
+  // Without this, anyone could inject a message into any trip's conversation — and the two
+  // people on that trip would have no way to tell it came from outside.
+  const booking = await loadTripFor(req, res);
+  if (!booking) return;
+
   const message = await prisma.message.create({
     data: { bookingId: req.params.id, senderId: req.auth!.sub, text: parsed.data.text },
   });
