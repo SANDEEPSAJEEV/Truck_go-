@@ -21,15 +21,10 @@ suite("security", "13 — Security & authorization", () => {
 
   /* ------------------------------------------------------------ cross-tenant reads */
 
-  test.known(
-    "13.1",
-    "one rider cannot read another rider's booking",
-    "GET /bookings/:id checks authentication but never ownership — fix A1",
-    async () => {
-      const res = await api(`/bookings/${victimBookingId}`, { token: ctx.rider2.accessToken });
-      expect(res.status, "status").toBeOneOf([403, 404]);
-    },
-  );
+  test("13.1", "one rider cannot read another rider's booking", async () => {
+    const res = await api(`/bookings/${victimBookingId}`, { token: ctx.rider2.accessToken });
+    expect(res.status, "status").toBeOneOf([403, 404]);
+  });
 
   test("13.2", "a driver may read an open booking, but not one assigned to someone else", async () => {
     // An AWAITING_BIDS booking is on the open market — an approved driver has to be able to
@@ -142,36 +137,26 @@ suite("security", "13 — Security & authorization", () => {
 
   /* -------------------------------------------------------- destructive operations */
 
-  test.known(
-    "13.11",
-    "a stranger cannot cancel someone else's booking or trip",
-    "neither POST /bookings/:id/cancel nor POST /trips/:id/cancel checks ownership — fix A2 (destructive)",
-    async () => {
-      const a = await createBooking(ctx.rider);
-      const viaBookings = await api(`/bookings/${a.id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
-      expect(viaBookings.status, "via /bookings").toBeOneOf([403, 404]);
+  test("13.11", "a stranger cannot cancel someone else's booking or trip", async () => {
+    const a = await createBooking(ctx.rider);
+    const viaBookings = await api(`/bookings/${a.id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
+    expect(viaBookings.status, "via /bookings").toBeOneOf([403, 404]);
 
-      const b = await createBooking(ctx.rider);
-      const viaTrips = await api(`/trips/${b.id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
-      expect(viaTrips.status, "via /trips").toBeOneOf([403, 404]);
+    const b = await createBooking(ctx.rider);
+    const viaTrips = await api(`/trips/${b.id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
+    expect(viaTrips.status, "via /trips").toBeOneOf([403, 404]);
 
-      for (const id of [a.id, b.id]) {
-        const row = await db.booking.findUniqueOrThrow({ where: { id } });
-        expect(row.status, `${id} survived`).toBe("AWAITING_BIDS");
-      }
-    },
-  );
+    for (const id of [a.id, b.id]) {
+      const row = await db.booking.findUniqueOrThrow({ where: { id } });
+      expect(row.status, `${id} survived`).toBe("AWAITING_BIDS");
+    }
+  });
 
-  test.known(
-    "13.12",
-    "a driver cannot cancel a trip that is not theirs",
-    "cancel routes check authentication only — fix A2",
-    async () => {
-      const booking = await createBooking(ctx.rider);
-      const res = await api(`/trips/${booking.id}/cancel`, { method: "POST", token: ctx.driverFar.accessToken, body: {} });
-      expect(res.status, "status").toBeOneOf([403, 404]);
-    },
-  );
+  test("13.12", "a driver cannot cancel a trip that is not theirs", async () => {
+    const booking = await createBooking(ctx.rider);
+    const res = await api(`/trips/${booking.id}/cancel`, { method: "POST", token: ctx.driverFar.accessToken, body: {} });
+    expect(res.status, "status").toBeOneOf([403, 404]);
+  });
 
   /* ------------------------------------------------------- secrets and injection */
 

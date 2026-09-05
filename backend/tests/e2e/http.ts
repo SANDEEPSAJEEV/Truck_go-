@@ -89,7 +89,7 @@ export type RequestOptions = {
  * that aborts on one is worse than useless — it reports a network blip as a product defect.
  * A 4xx or 5xx, by contrast, is exactly the signal we came for and is returned untouched.
  */
-const NETWORK_RETRIES = 3;
+const NETWORK_RETRIES = 5;
 
 export async function api<T = any>(path: string, opts: RequestOptions = {}): Promise<ApiResponse<T>> {
   const res = await withNetworkRetry<T>(path, opts);

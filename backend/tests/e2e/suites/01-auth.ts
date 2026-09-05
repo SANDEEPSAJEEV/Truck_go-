@@ -7,7 +7,7 @@
 
 import { suite, test, expect } from "../runner";
 import { api, sleep } from "../http";
-import { ctx, disposableRider, getOtp, login, nextPhone, PASSWORD, trackToken, verifyPhone } from "../actors";
+import { ctx, disposableRider, getOtp, login, nextPhone, PASSWORD, verifyPhone } from "../actors";
 import { db } from "../db";
 
 suite("auth", "01 — Auth", () => {
@@ -311,19 +311,19 @@ suite("auth", "01 — Auth", () => {
 
   /* ------------------------------------------------------------------ Session */
 
+  // These three use a rider of their own rather than a shared fixture. Rotation is
+  // stateful — every rotation invalidates the token before it and reuse revokes the whole
+  // family — so sharing an actor with the harness's own background token refresh made them
+  // intermittently fail on a token something else had already rotated.
   test("1.24", "a refresh token exchanges for a working access token", async () => {
-    const fresh = await login(ctx.rider2.phone, PASSWORD, "USER");
+    const actor = await disposableRider("rotate");
+    const fresh = await login(actor.phone, PASSWORD, "USER");
     const res = await api("/auth/refresh", { method: "POST", body: { refreshToken: fresh.refreshToken } });
     expect(res.status, "status").toBe(200);
     expect(res.body.accessToken, "accessToken").toBeDefined();
 
-    const me = await api("/users/me", { token: res.body.accessToken });
+    const me = await api("/users/me", { token: res.body.accessToken, noRefresh: true });
     expect(me.status, "the new token works").toBe(200);
-
-    // Keep ctx in step — rotation invalidated the token the fixture was holding.
-    ctx.rider2.accessToken = res.body.accessToken;
-    ctx.rider2.refreshToken = res.body.refreshToken;
-    trackToken(ctx.rider2);
   });
 
   test("1.25", "an access token is not accepted as a refresh token", async () => {
@@ -332,9 +332,10 @@ suite("auth", "01 — Auth", () => {
   });
 
   test("1.26", "a rotated refresh token cannot be replayed", async () => {
-    const fresh = await login(ctx.rider2.phone, PASSWORD, "USER");
+    const actor = await disposableRider("replay");
+    const fresh = await login(actor.phone, PASSWORD, "USER");
     const first = await api("/auth/refresh", { method: "POST", body: { refreshToken: fresh.refreshToken } });
-    expect(first.status, "first rotation").toBe(200);
+    expect(first.status, `first rotation (code=${first.code ?? "none"})`).toBe(200);
 
     // Reuse detection: presenting the old token again should kill the session, not quietly
     // mint another one.
@@ -344,7 +345,8 @@ suite("auth", "01 — Auth", () => {
   });
 
   test("1.27", "logout revokes the refresh token server-side", async () => {
-    const session = await login(ctx.rider2.phone, PASSWORD, "USER");
+    const actor = await disposableRider("logout");
+    const session = await login(actor.phone, PASSWORD, "USER");
     const out = await api("/auth/logout", {
       method: "POST",
       token: session.accessToken,

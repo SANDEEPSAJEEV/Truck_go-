@@ -8,7 +8,7 @@
 
 import { suite, test, expect } from "../runner";
 import { api, sleep } from "../http";
-import { ctx, createBooking, goOnline, goOffline, KOCHI, KOCHI_NEARBY, RING_TWO, FAR_AWAY } from "../actors";
+import { ctx, createBooking, goOnline, goOffline, KOCHI, KOCHI_NEARBY, RING_TWO, FAR_AWAY, liveToken } from "../actors";
 import { db } from "../db";
 import { TestSocket } from "../socket";
 import { haversineKm } from "../../../src/lib/dispatch";
@@ -25,7 +25,7 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
 
   test("11.2", "a nearby eligible driver is notified over the socket", async () => {
     await goOnline(ctx.driverA, KOCHI_NEARBY);
-    const socket = await TestSocket.connect("driverA-dispatch", ctx.driverA.accessToken);
+    const socket = await TestSocket.connect("driverA-dispatch", await liveToken(ctx.driverA));
     try {
       const booking = await createBooking(ctx.rider);
       const payload = await socket.waitFor("load:new", (p) => p.bookingId === booking.id);
@@ -35,35 +35,30 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
     }
   });
 
-  test.known(
-    "11.3",
-    "load:new must carry a numeric estimatedFare",
-    "dispatch sends the raw Prisma Decimal, which serialises as a JSON string — the popup's Accept then posts a string amount, zod rejects it, and load-alert-host's bare catch hides the failure. Fix A5",
-    async () => {
-      await goOnline(ctx.driverA, KOCHI_NEARBY);
-      const socket = await TestSocket.connect("driverA-payload", ctx.driverA.accessToken);
-      try {
-        const booking = await createBooking(ctx.rider);
-        const payload = await socket.waitFor("load:new", (p) => p.bookingId === booking.id);
+  test("11.3", "load:new must carry a numeric estimatedFare", async () => {
+    await goOnline(ctx.driverA, KOCHI_NEARBY);
+    const socket = await TestSocket.connect("driverA-payload", await liveToken(ctx.driverA));
+    try {
+      const booking = await createBooking(ctx.rider);
+      const payload = await socket.waitFor("load:new", (p) => p.bookingId === booking.id);
 
-        // Everything load-alert-host renders.
-        expect(payload.reference, "reference").toBeDefined();
-        expect(payload.pickupAddress, "pickupAddress").toBeDefined();
-        expect(payload.dropAddress, "dropAddress").toBeDefined();
-        expect(payload.vehicleType, "vehicleType").toBe("tataAce");
-        expect(typeof payload.distanceKm, "distanceKm type").toBe("number");
-        // And the one it posts straight back as a bid amount.
-        expect(typeof payload.estimatedFare, "estimatedFare type").toBe("number");
-      } finally {
-        socket.close();
-      }
-    },
-  );
+      // Everything load-alert-host renders.
+      expect(payload.reference, "reference").toBeDefined();
+      expect(payload.pickupAddress, "pickupAddress").toBeDefined();
+      expect(payload.dropAddress, "dropAddress").toBeDefined();
+      expect(payload.vehicleType, "vehicleType").toBe("tataAce");
+      expect(typeof payload.distanceKm, "distanceKm type").toBe("number");
+      // And the one it posts straight back as a bid amount.
+      expect(typeof payload.estimatedFare, "estimatedFare type").toBe("number");
+    } finally {
+      socket.close();
+    }
+  });
 
   test("11.4", "the fare from load:new is actually usable as a bid", async () => {
     // The end the driver feels: tapping Accept on the popup must place a real bid.
     await goOnline(ctx.driverA, KOCHI_NEARBY);
-    const socket = await TestSocket.connect("driverA-accept", ctx.driverA.accessToken);
+    const socket = await TestSocket.connect("driverA-accept", await liveToken(ctx.driverA));
     try {
       const booking = await createBooking(ctx.rider);
       const payload = await socket.waitFor("load:new", (p) => p.bookingId === booking.id);
@@ -81,7 +76,7 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
 
   test("11.5", "a driver with the wrong vehicle is not notified", async () => {
     await goOnline(ctx.driverWrongVehicle, KOCHI_NEARBY);
-    const socket = await TestSocket.connect("wrongVehicle", ctx.driverWrongVehicle.accessToken);
+    const socket = await TestSocket.connect("wrongVehicle", await liveToken(ctx.driverWrongVehicle));
     try {
       const booking = await createBooking(ctx.rider);
       await socket.expectSilence("load:new", 5000, (p) => p.bookingId === booking.id);
@@ -92,7 +87,7 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
 
   test("11.6", "a driver outside every radius is not notified", async () => {
     await goOnline(ctx.driverFar, FAR_AWAY);
-    const socket = await TestSocket.connect("farDriver", ctx.driverFar.accessToken);
+    const socket = await TestSocket.connect("farDriver", await liveToken(ctx.driverFar));
     try {
       const booking = await createBooking(ctx.rider);
       await socket.expectSilence("load:new", 5000, (p) => p.bookingId === booking.id);
@@ -104,7 +99,7 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
   test("11.7", "an offline driver is not notified, even parked at the pickup", async () => {
     await goOnline(ctx.driverB, KOCHI_NEARBY);
     await goOffline(ctx.driverB);
-    const socket = await TestSocket.connect("offlineDriver", ctx.driverB.accessToken);
+    const socket = await TestSocket.connect("offlineDriver", await liveToken(ctx.driverB));
     try {
       const booking = await createBooking(ctx.rider);
       await socket.expectSilence("load:new", 5000, (p) => p.bookingId === booking.id);
@@ -225,7 +220,7 @@ suite("dispatch", "11 — Dispatch & eligibility", () => {
       body: { amount: Number(booking.estimatedFare) },
     });
 
-    const socket = await TestSocket.connect("driverB-taken", ctx.driverB.accessToken);
+    const socket = await TestSocket.connect("driverB-taken", await liveToken(ctx.driverB));
     try {
       await api(`/bookings/${booking.id}/bids/${winner.body.bid.id}/accept`, {
         method: "POST",

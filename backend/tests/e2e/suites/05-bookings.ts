@@ -141,15 +141,10 @@ suite("bookings", "05 — Bookings & feed", () => {
     expect(res.body.booking.dropOtp, "dropOtp").toBeNull();
   });
 
-  test.known(
-    "5.11",
-    "an unrelated rider cannot read someone else's booking",
-    "GET /bookings/:id has requireAuth but no ownership check — fix A1",
-    async () => {
-      const res = await api(`/bookings/${openBookingId}`, { token: ctx.rider2.accessToken });
-      expect(res.status, "status").toBeOneOf([403, 404]);
-    },
-  );
+  test("5.11", "an unrelated rider cannot read someone else's booking", async () => {
+    const res = await api(`/bookings/${openBookingId}`, { token: ctx.rider2.accessToken });
+    expect(res.status, "status").toBeOneOf([403, 404]);
+  });
 
   test("5.12", "a nonexistent booking id returns 404", async () => {
     const res = await api("/bookings/clzzzzzzzzzzzzzzzzzzzzzzz", { token: ctx.rider.accessToken });
@@ -287,23 +282,18 @@ suite("bookings", "05 — Bookings & feed", () => {
     expect(again.code, "code").toBe("INVALID_STATE");
   });
 
-  test.known(
-    "5.26",
-    "a stranger must not be able to cancel someone else's booking",
-    "POST /bookings/:id/cancel has requireAuth but no ownership check — fix A2 (destructive)",
-    async () => {
-      const victim = await createBooking(ctx.rider);
-      const res = await api(`/bookings/${victim.id}/cancel`, {
-        method: "POST",
-        token: ctx.rider2.accessToken,
-        body: { reason: "not mine to cancel" },
-      });
-      expect(res.status, "status").toBeOneOf([403, 404]);
+  test("5.26", "a stranger must not be able to cancel someone else's booking", async () => {
+    const victim = await createBooking(ctx.rider);
+    const res = await api(`/bookings/${victim.id}/cancel`, {
+      method: "POST",
+      token: ctx.rider2.accessToken,
+      body: { reason: "not mine to cancel" },
+    });
+    expect(res.status, "status").toBeOneOf([403, 404]);
 
-      const row = await db.booking.findUniqueOrThrow({ where: { id: victim.id } });
-      expect(row.status, "booking survived").toBe("AWAITING_BIDS");
-    },
-  );
+    const row = await db.booking.findUniqueOrThrow({ where: { id: victim.id } });
+    expect(row.status, "booking survived").toBe("AWAITING_BIDS");
+  });
 
   test("5.27", "PATCH /bookings/:id/status cannot be used to skip the custody chain", async () => {
     // This endpoint exists for parity with the recovered client SDK. It must never be a

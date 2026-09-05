@@ -12,7 +12,7 @@
 
 import { suite, test, expect } from "../runner";
 import { api } from "../http";
-import { ctx } from "../actors";
+import { ctx, liveToken } from "../actors";
 import { db } from "../db";
 import { state, require as need } from "../state";
 import { TestSocket, subscribeTrip } from "../socket";
@@ -32,7 +32,7 @@ suite("trips", "07 — Trip lifecycle & PIN gates", () => {
 
   test("7.0", "the rider joins the trip room and starts recording PINs", async () => {
     const id = need("tripBookingId", "suite 06 must accept a bid first");
-    riderSocket = await TestSocket.connect("rider", ctx.rider.accessToken);
+    riderSocket = await TestSocket.connect("rider", await liveToken(ctx.rider));
     await subscribeTrip(riderSocket, id);
 
     // trip:otp is pushed to the rider's private user room, so it arrives whether or not the
@@ -310,18 +310,13 @@ suite("trips", "07 — Trip lifecycle & PIN gates", () => {
     if (res.body.etaMinutes !== null) expect(Number.isFinite(res.body.etaMinutes), "etaMinutes is finite").toBe(true);
   });
 
-  test.known(
-    "7.22",
-    "live driver location must not be readable by a stranger",
-    "GET /trips/:id/location and /tracking have no ownership check — fix A3 (security)",
-    async () => {
-      const location = await api(`/trips/${state.deliveredBookingId}/location`, { token: ctx.rider2.accessToken });
-      expect(location.status, "location").toBeOneOf([403, 404]);
+  test("7.22", "live driver location must not be readable by a stranger", async () => {
+    const location = await api(`/trips/${state.deliveredBookingId}/location`, { token: ctx.rider2.accessToken });
+    expect(location.status, "location").toBeOneOf([403, 404]);
 
-      const tracking = await api(`/trips/${state.deliveredBookingId}/tracking`, { token: ctx.rider2.accessToken });
-      expect(tracking.status, "tracking").toBeOneOf([403, 404]);
-    },
-  );
+    const tracking = await api(`/trips/${state.deliveredBookingId}/tracking`, { token: ctx.rider2.accessToken });
+    expect(tracking.status, "tracking").toBeOneOf([403, 404]);
+  });
 
   test("7.23", "the assigned parties can read the driver's last location", async () => {
     const res = await api(`/trips/${state.deliveredBookingId}/location`, { token: ctx.rider.accessToken });
@@ -363,29 +358,24 @@ suite("trips", "07 — Trip lifecycle & PIN gates", () => {
     expect(res.body.booking.status, "status").toBe("CANCELLED");
   });
 
-  test.known(
-    "7.26",
-    "a stranger must not be able to cancel someone else's trip",
-    "POST /trips/:id/cancel has requireAuth but no ownership check — fix A2 (destructive)",
-    async () => {
-      const scratch = await api("/bookings", {
-        method: "POST",
-        token: ctx.rider.accessToken,
-        body: {
-          pickup: { address: "Marine Drive, Kochi", lat: 9.9312, lng: 76.2673 },
-          drop: { address: "Thrissur Round, Thrissur", lat: 10.5276, lng: 76.2144 },
-          vehicleType: "tataAce",
-        },
-      });
-      const id = scratch.body.booking.id;
+  test("7.26", "a stranger must not be able to cancel someone else's trip", async () => {
+    const scratch = await api("/bookings", {
+      method: "POST",
+      token: ctx.rider.accessToken,
+      body: {
+        pickup: { address: "Marine Drive, Kochi", lat: 9.9312, lng: 76.2673 },
+        drop: { address: "Thrissur Round, Thrissur", lat: 10.5276, lng: 76.2144 },
+        vehicleType: "tataAce",
+      },
+    });
+    const id = scratch.body.booking.id;
 
-      const res = await api(`/trips/${id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
-      expect(res.status, "status").toBeOneOf([403, 404]);
+    const res = await api(`/trips/${id}/cancel`, { method: "POST", token: ctx.rider2.accessToken, body: {} });
+    expect(res.status, "status").toBeOneOf([403, 404]);
 
-      const row = await db.booking.findUniqueOrThrow({ where: { id } });
-      expect(row.status, "booking survived").toBe("AWAITING_BIDS");
-    },
-  );
+    const row = await db.booking.findUniqueOrThrow({ where: { id } });
+    expect(row.status, "booking survived").toBe("AWAITING_BIDS");
+  });
 
   test("7.27", "a delivered trip cannot be cancelled", async () => {
     const res = await api(`/trips/${state.deliveredBookingId}/cancel`, {
@@ -421,22 +411,17 @@ suite("trips", "07 — Trip lifecycle & PIN gates", () => {
     expect(res.status, "status").toBe(400);
   });
 
-  test.known(
-    "7.30",
-    "a stranger must not be able to read or inject trip messages",
-    "GET/POST /trips/:id/messages have no ownership check — fix A3",
-    async () => {
-      const read = await api(`/trips/${state.deliveredBookingId}/messages`, { token: ctx.rider2.accessToken });
-      expect(read.status, "read").toBeOneOf([403, 404]);
+  test("7.30", "a stranger must not be able to read or inject trip messages", async () => {
+    const read = await api(`/trips/${state.deliveredBookingId}/messages`, { token: ctx.rider2.accessToken });
+    expect(read.status, "read").toBeOneOf([403, 404]);
 
-      const write = await api(`/trips/${state.deliveredBookingId}/messages`, {
-        method: "POST",
-        token: ctx.rider2.accessToken,
-        body: { text: "injected" },
-      });
-      expect(write.status, "write").toBeOneOf([403, 404]);
-    },
-  );
+    const write = await api(`/trips/${state.deliveredBookingId}/messages`, {
+      method: "POST",
+      token: ctx.rider2.accessToken,
+      body: { text: "injected" },
+    });
+    expect(write.status, "write").toBeOneOf([403, 404]);
+  });
 
   test("7.99", "disconnect", async () => {
     riderSocket?.close();

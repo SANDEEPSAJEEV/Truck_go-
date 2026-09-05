@@ -59,86 +59,61 @@ suite("ratings", "10 — Ratings", () => {
     }
   });
 
-  test.known(
-    "10.5",
-    "rating the same booking twice must be refused, not 500",
-    "no duplicate guard — the unique constraint throws unhandled. Fix A4",
-    async () => {
-      const bookingId = state.deliveredBookingId!;
-      const res = await api("/ratings", {
-        method: "POST",
-        token: ctx.rider.accessToken,
-        body: { bookingId, toUserId: ctx.driverA.id, stars: 1, comment: "second bite" },
-      });
-      expect(res.status, "status").toBe(409);
-      expect(res.status, "definitely not a 500").toBeLessThan(500);
-    },
-  );
+  test("10.5", "rating the same booking twice must be refused, not 500", async () => {
+    const bookingId = state.deliveredBookingId!;
+    const res = await api("/ratings", {
+      method: "POST",
+      token: ctx.rider.accessToken,
+      body: { bookingId, toUserId: ctx.driverA.id, stars: 1, comment: "second bite" },
+    });
+    expect(res.status, "status").toBe(409);
+    expect(res.status, "definitely not a 500").toBeLessThan(500);
+  });
 
-  test.known(
-    "10.6",
-    "a stranger must not be able to rate a trip they had no part in",
-    "POST /ratings never checks the caller was party to the booking — fix A4",
-    async () => {
-      const bookingId = state.deliveredBookingId!;
-      const before = await db.driverProfile.findUniqueOrThrow({ where: { userId: ctx.driverA.id } });
+  test("10.6", "a stranger must not be able to rate a trip they had no part in", async () => {
+    const bookingId = state.deliveredBookingId!;
+    const before = await db.driverProfile.findUniqueOrThrow({ where: { userId: ctx.driverA.id } });
 
-      const res = await api("/ratings", {
-        method: "POST",
-        token: ctx.rider2.accessToken,
-        body: { bookingId, toUserId: ctx.driverA.id, stars: 1, comment: "never met them" },
-      });
-      expect(res.status, "status").toBeOneOf([403, 404]);
+    const res = await api("/ratings", {
+      method: "POST",
+      token: ctx.rider2.accessToken,
+      body: { bookingId, toUserId: ctx.driverA.id, stars: 1, comment: "never met them" },
+    });
+    expect(res.status, "status").toBeOneOf([403, 404]);
 
-      const after = await db.driverProfile.findUniqueOrThrow({ where: { userId: ctx.driverA.id } });
-      expect(after.ratingCount, "average untouched").toBe(before.ratingCount);
-    },
-  );
+    const after = await db.driverProfile.findUniqueOrThrow({ where: { userId: ctx.driverA.id } });
+    expect(after.ratingCount, "average untouched").toBe(before.ratingCount);
+  });
 
-  test.known(
-    "10.7",
-    "a trip that was never delivered must not be ratable",
-    "POST /ratings never checks booking status — fix A4",
-    async () => {
-      const open = await createBooking(ctx.rider);
-      const res = await api("/ratings", {
-        method: "POST",
-        token: ctx.rider.accessToken,
-        body: { bookingId: open.id, toUserId: ctx.driverA.id, stars: 5 },
-      });
-      expect(res.status, "status").toBe(409);
-    },
-  );
+  test("10.7", "a trip that was never delivered must not be ratable", async () => {
+    const open = await createBooking(ctx.rider);
+    const res = await api("/ratings", {
+      method: "POST",
+      token: ctx.rider.accessToken,
+      body: { bookingId: open.id, toUserId: ctx.driverA.id, stars: 5 },
+    });
+    expect(res.status, "status").toBe(409);
+  });
 
-  test.known(
-    "10.8",
-    "a rating for a nonexistent booking must be refused, not 500",
-    "no existence check — the foreign key throws unhandled. Fix A4",
-    async () => {
-      const res = await api("/ratings", {
-        method: "POST",
-        token: ctx.rider.accessToken,
-        body: { bookingId: "clzzzzzzzzzzzzzzzzzzzzzzz", toUserId: ctx.driverA.id, stars: 5 },
-      });
-      expect(res.status, "status").toBeOneOf([400, 404]);
-      expect(res.status, "not a 500").toBeLessThan(500);
-    },
-  );
+  test("10.8", "a rating for a nonexistent booking must be refused, not 500", async () => {
+    const res = await api("/ratings", {
+      method: "POST",
+      token: ctx.rider.accessToken,
+      body: { bookingId: "clzzzzzzzzzzzzzzzzzzzzzzz", toUserId: ctx.driverA.id, stars: 5 },
+    });
+    expect(res.status, "status").toBeOneOf([400, 404]);
+    expect(res.status, "not a 500").toBeLessThan(500);
+  });
 
-  test.known(
-    "10.9",
-    "the recipient must be the counterparty on that trip",
-    "toUserId is taken on trust — fix A4",
-    async () => {
-      const bookingId = state.deliveredBookingId!;
-      const res = await api("/ratings", {
-        method: "POST",
-        token: ctx.rider.accessToken,
-        body: { bookingId, toUserId: ctx.driverB.id, stars: 1 },
-      });
-      expect(res.status, "status").toBeOneOf([400, 403, 409]);
-    },
-  );
+  test("10.9", "the recipient must be the counterparty on that trip", async () => {
+    const bookingId = state.deliveredBookingId!;
+    const res = await api("/ratings", {
+      method: "POST",
+      token: ctx.rider.accessToken,
+      body: { bookingId, toUserId: ctx.driverB.id, stars: 1 },
+    });
+    expect(res.status, "status").toBeOneOf([400, 403, 409]);
+  });
 
   test("10.10", "the driver can rate the rider back", async () => {
     // The driver app has a feedback screen but nothing navigates to it, so this direction

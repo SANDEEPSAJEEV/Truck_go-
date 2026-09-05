@@ -161,48 +161,56 @@ suite("drivers", "02 — Drivers & profile", () => {
     expect(get.body.ifscCode, "ifscCode").toBe(details.ifscCode);
   });
 
-  test.known(
-    "2.14",
-    "empty strings must not blank a saved payout account",
-    "bankDetailsSchema uses bare z.string(), which accepts \"\" — fix B2",
-    async () => {
-      const res = await api("/drivers/bank-details", {
-        method: "PUT",
-        token: ctx.driverA.accessToken,
-        body: { accountHolderName: "", bankAccountNumber: "", ifscCode: "" },
-      });
-      expect(res.status, "status").toBe(400);
+  test("2.14", "empty strings must not blank a saved payout account", async () => {
+    const res = await api("/drivers/bank-details", {
+      method: "PUT",
+      token: ctx.driverA.accessToken,
+      body: { accountHolderName: "", bankAccountNumber: "", ifscCode: "" },
+    });
+    expect(res.status, "status").toBe(400);
 
-      const after = await api("/drivers/bank-details", { token: ctx.driverA.accessToken });
-      expect(after.body.bankAccountNumber, "account number survived").toBe("123456789012");
-    },
-  );
+    // Checked through the masked view, which is all the server hands back now — the last
+    // four digits are enough to prove the stored account is the one saved in 2.13, and not
+    // a blank left behind by the rejected write.
+    const after = await api("/drivers/bank-details", { token: ctx.driverA.accessToken });
+    expect(after.body.hasBankAccountNumber, "an account is still on file").toBe(true);
+    expect(String(after.body.bankAccountNumber).endsWith("9012"), "it is the same account").toBe(true);
+  });
 
-  test.known(
-    "2.15",
-    "the account number should come back masked, as the driver UI claims",
-    "GET returns the raw number while bank-details.tsx says it is always masked — fix B2",
-    async () => {
-      // Re-saved here rather than relying on 2.13's value: while the empty-string bug in 2.14
-      // stands, that case blanks the account, and this one would then pass for the wrong
-      // reason — a masked-looking empty string rather than an actually masked number.
-      await api("/drivers/bank-details", {
-        method: "PUT",
-        token: ctx.driverA.accessToken,
-        body: {
-          accountHolderName: "Mock Verified Holder Owner",
-          bankAccountNumber: "123456789012",
-          ifscCode: "HDFC0001234",
-        },
-      });
+  test("2.14b", "omitting the account number leaves the saved one alone", async () => {
+    // What the driver app does when someone edits their name without retyping the number.
+    const res = await api("/drivers/bank-details", {
+      method: "PUT",
+      token: ctx.driverA.accessToken,
+      body: { accountHolderName: "Mock Verified Holder Owner", ifscCode: "HDFC0001234" },
+    });
+    expect(res.status, "status").toBe(204);
 
-      const res = await api("/drivers/bank-details", { token: ctx.driverA.accessToken });
-      const shown = String(res.body.bankAccountNumber ?? "");
-      expect(shown.length, "something is returned").toBeGreaterThan(0);
-      expect(shown.includes("123456789012"), "full number is exposed").toBe(false);
-      expect(shown.endsWith("9012"), "the last four are still recognisable").toBe(true);
-    },
-  );
+    const after = await api("/drivers/bank-details", { token: ctx.driverA.accessToken });
+    expect(after.body.hasBankAccountNumber, "account still on file").toBe(true);
+    expect(String(after.body.bankAccountNumber).endsWith("9012"), "unchanged").toBe(true);
+  });
+
+  test("2.15", "the account number should come back masked, as the driver UI claims", async () => {
+    // Re-saved here rather than relying on 2.13's value: while the empty-string bug in 2.14
+    // stands, that case blanks the account, and this one would then pass for the wrong
+    // reason — a masked-looking empty string rather than an actually masked number.
+    await api("/drivers/bank-details", {
+      method: "PUT",
+      token: ctx.driverA.accessToken,
+      body: {
+        accountHolderName: "Mock Verified Holder Owner",
+        bankAccountNumber: "123456789012",
+        ifscCode: "HDFC0001234",
+      },
+    });
+
+    const res = await api("/drivers/bank-details", { token: ctx.driverA.accessToken });
+    const shown = String(res.body.bankAccountNumber ?? "");
+    expect(shown.length, "something is returned").toBeGreaterThan(0);
+    expect(shown.includes("123456789012"), "full number is exposed").toBe(false);
+    expect(shown.endsWith("9012"), "the last four are still recognisable").toBe(true);
+  });
 
   test("2.16", "bank details are scoped to the calling driver", async () => {
     const res = await api("/drivers/bank-details", { token: ctx.driverB.accessToken });

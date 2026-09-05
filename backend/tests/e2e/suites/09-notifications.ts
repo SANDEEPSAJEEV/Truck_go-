@@ -1,7 +1,7 @@
 /** Notifications and push-device registration. */
 
 import { suite, test, expect } from "../runner";
-import { api } from "../http";
+import { api, sleep } from "../http";
 import { ctx, createBooking, disposableRider } from "../actors";
 import { db } from "../db";
 
@@ -20,14 +20,22 @@ suite("notifications", "09 — Notifications & devices", () => {
     const before = await db.notification.count({ where: { userId: ctx.driverA.id, type: "LOAD_NEW" } });
     const booking = await createBooking(ctx.rider);
 
-    const after = await db.notification.findMany({
-      where: { userId: ctx.driverA.id, type: "LOAD_NEW", bookingId: booking.id },
-    });
+    // Dispatch is deliberately not awaited into the create response — a dispatch failure
+    // must never turn an accepted booking into an error the customer retries. So the row
+    // arrives shortly after the 201, and a single fixed delay is a race under load.
+    let after: { id: string }[] = [];
+    for (let i = 0; i < 10 && after.length === 0; i++) {
+      after = await db.notification.findMany({
+        where: { userId: ctx.driverA.id, type: "LOAD_NEW", bookingId: booking.id },
+        select: { id: true },
+      });
+      if (after.length === 0) await sleep(1000);
+    }
     expect(after.length, "a row for this booking").toBe(1);
     expect(await db.notification.count({ where: { userId: ctx.driverA.id, type: "LOAD_NEW" } }), "count grew")
       .toBeGreaterThan(before);
 
-    const row = after[0];
+    const row = await db.notification.findUniqueOrThrow({ where: { id: after[0].id } });
     expect(row.title, "title").toBeDefined();
     expect(row.body, "body names both ends of the trip").toContain("→");
     expect(row.isRead, "starts unread").toBe(false);
@@ -77,14 +85,24 @@ suite("notifications", "09 — Notifications & devices", () => {
 
   test("9.7", "read-all clears only the caller's unread rows", async () => {
     await createBooking(ctx.rider); // guarantee at least one unread for driverB
-    const otherBefore = await db.notification.count({ where: { userId: ctx.driverA.id, isRead: false } });
+
+    // Compared by row id, not by count. Dispatch keeps writing new rows for driverA while
+    // this runs, so a count taken before and after measures the background noise rather
+    // than whether driverB's read-all reached across to another driver.
+    const othersBefore = await db.notification.findMany({
+      where: { userId: ctx.driverA.id, isRead: false },
+      select: { id: true },
+    });
 
     const res = await api("/notifications/read-all", { method: "PATCH", token: ctx.driverB.accessToken });
     expect(res.status, "status").toBe(204);
 
     expect(await db.notification.count({ where: { userId: ctx.driverB.id, isRead: false } }), "driverB has none unread").toBe(0);
-    expect(await db.notification.count({ where: { userId: ctx.driverA.id, isRead: false } }), "driverA untouched")
-      .toBe(otherBefore);
+
+    const stillUnread = await db.notification.count({
+      where: { id: { in: othersBefore.map((n) => n.id) }, isRead: false },
+    });
+    expect(stillUnread, "every one of driverA's unread rows is still unread").toBe(othersBefore.length);
   });
 
   test("9.8", "notifications require authentication", async () => {
@@ -110,11 +128,16 @@ suite("notifications", "09 — Notifications & devices", () => {
   });
 
   test("9.10", "registering the same token twice does not duplicate it", async () => {
-    await api("/devices/register", {
+    const again = await api("/devices/register", {
       method: "POST",
       token: ctx.driverA.accessToken,
       body: { expoPushToken: tokenA, platform: "android" },
     });
+    expect(again.status, "second registration").toBe(204);
+
+    // The unique constraint on the token is what guarantees this, so one row is the only
+    // possible answer — but give the write a beat to land before counting.
+    await sleep(500);
     const count = await db.device.count({ where: { expoPushToken: tokenA } });
     expect(count, "one row").toBe(1);
   });

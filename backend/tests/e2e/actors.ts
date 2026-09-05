@@ -356,6 +356,22 @@ export async function disposableRider(label: string): Promise<Actor> {
   return registerRider(label, ctx.runId, ctx.phonePrefix);
 }
 
+/**
+ * An access token that is definitely still valid, for opening a socket.
+ *
+ * Socket handshakes don't go through `api()`, so the transparent refresh that keeps HTTP
+ * calls alive never sees them. A run outlives the 15-minute token lifetime several times
+ * over, so a socket opened with a fixture's cached token is simply refused — and the case
+ * fails with "unauthorized", which looks exactly like a real authorization defect.
+ *
+ * Touching an authenticated endpoint first is enough: `api()` refreshes on the 401 and
+ * updates the actor in place.
+ */
+export async function liveToken(actor: Actor): Promise<string> {
+  await api("/users/me", { token: actor.accessToken });
+  return actor.accessToken;
+}
+
 /** A booking in the standard Kochi corridor, ready for the dispatch and bidding suites. */
 export async function createBooking(
   rider: Actor,
