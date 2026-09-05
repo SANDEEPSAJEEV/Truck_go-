@@ -23,6 +23,7 @@ import { getSocket } from '@/lib/socket';
 import { useAuth } from '@/lib/auth-context';
 import { DEMO_MODE } from '@/lib/demo';
 import { vehicleLabel } from '@/lib/vehicle';
+import { countCompletedToday, type EarningsResponse } from '@/lib/earnings';
 
 type MyBid = { id: string; amount: number; status: string } | null;
 
@@ -61,8 +62,29 @@ export default function Dashboard() {
   const [feedError, setFeedError] = useState('');
   const [actionError, setActionError] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Continuous fix with heading, not a one-shot read — this is what lets the map show a
+  // directional arrow and keep the camera on it as the driver actually moves, the way the
+  // trip screen's own tracking already does. Local display only: this never reaches the
+  // network by itself. Going online is still the only thing that publishes a position.
+  const [driverPos, setDriverPos] = useState<{ lat: number; lng: number; heading?: number } | null>(
+    null,
+  );
   const [sheetIndex, setSheetIndex] = useState(0);
+  const [tripsToday, setTripsToday] = useState(0);
+
+  // The stat card used to count pending bids on the open-load feed, which has nothing to
+  // do with trips actually completed today — it read 0 for an offline driver and never
+  // reflected reality either way. This reuses the same endpoint and day-bucketing logic
+  // `earnings.tsx` already gets right.
+  const loadTripsToday = useCallback(() => {
+    apiFetch<EarningsResponse>('/drivers/earnings')
+      .then((d) => setTripsToday(countCompletedToday(d.trips)))
+      .catch(() => {
+        // Non-fatal — the rest of the dashboard still works without this one figure.
+      });
+  }, []);
+
+  useFocusEffect(loadTripsToday);
 
   const loadFeed = useCallback(() => {
     setLoading(true);
@@ -82,14 +104,41 @@ export default function Dashboard() {
 
   useFocusEffect(loadFeed);
 
-  // Centre the map on the driver. Read-only — going online is what actually publishes a
-  // position, so a driver browsing the map offline isn't broadcasting anything.
-  useEffect(() => {
-    if (DEMO_MODE) return;
-    getPositionOrNull().then((pos) => {
-      if (pos) setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-    });
-  }, []);
+  // Live position, watched continuously while the dashboard is the visible tab — not just
+  // once on mount. Requesting permission here, on open, rather than waiting for the
+  // driver to reach for "Go Online" is deliberate: it's what makes the map show them on
+  // arrival instead of a fallback location that only resolves once they act.
+  //
+  // Scoped to focus, not just mount: Expo Router keeps tab screens mounted in the
+  // background, and a GPS watch left running under the Rides or Earnings tab would drain
+  // battery for a view nobody's looking at.
+  useFocusEffect(
+    useCallback(() => {
+      if (DEMO_MODE) return;
+      let subscription: Location.LocationSubscription | null = null;
+      let cancelled = false;
+
+      (async () => {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== 'granted' || cancelled) return;
+        subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, timeInterval: 4000, distanceInterval: 15 },
+          (pos) => {
+            setDriverPos({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              heading: pos.coords.heading ?? undefined,
+            });
+          },
+        );
+      })();
+
+      return () => {
+        cancelled = true;
+        subscription?.remove();
+      };
+    }, []),
+  );
 
   // Re-fetch immediately when going online, and keep polling while online so new
   // requests appear even if the socket dropped.
@@ -116,14 +165,17 @@ export default function Dashboard() {
           setOnline(false);
           return;
         }
-        const pos = await getPositionOrNull();
+        // The continuous watch above is usually already running and has a fix by the time
+        // a driver reaches for this toggle — reuse it rather than taking a second,
+        // separate reading that could disagree with what the map is already showing.
+        // Only falls back to a fresh one-shot read if the watch hasn't produced one yet.
+        const pos = driverPos ?? (await getPositionOrNull().then((p) => p && { lat: p.coords.latitude, lng: p.coords.longitude }));
         if (!pos) {
           setActionError("Couldn't get your location. Check GPS and try again.");
           setOnline(false);
           return;
         }
-        nextCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setCoords(nextCoords);
+        nextCoords = { lat: pos.lat, lng: pos.lng };
       }
       // Confirmed PUT, not POST — decompiled_user.js:438228 (publishDriverLocation).
       await apiFetch('/drivers/location', { method: 'PUT', body: { ...nextCoords, isOnline: next } });
@@ -219,7 +271,11 @@ export default function Dashboard() {
   return (
     <Screen>
       <View style={styles.root}>
-        <LiveMap style={StyleSheet.absoluteFill} center={coords ?? undefined} showsUserLocation />
+        {/* `driver`, not `center`/`showsUserLocation` — this is what draws the rotating
+            directional arrow (the same marker the trip screen uses) and drives the
+            existing camera-follow effect in LiveMap, so the map actually tracks the
+            driver moving instead of a native dot sitting under a fixed frame. */}
+        <LiveMap style={StyleSheet.absoluteFill} driver={driverPos ?? undefined} />
 
         {/* box-none throughout: an invisible full-screen overlay that swallows touches
             would leave the map unpannable, which reads as "the map is frozen". */}
@@ -265,7 +321,7 @@ export default function Dashboard() {
                 Today&apos;s trips
               </AppText>
               <AppText style={[DisplayType.amountMd, styles.mono, { color: Colors.primary }]}>
-                {bookings.filter((b) => b.myBid?.status === 'PENDING').length || 0}
+                {tripsToday}
               </AppText>
             </Card>
             <Card elevated style={styles.statCard}>

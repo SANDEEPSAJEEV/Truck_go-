@@ -52,8 +52,18 @@ export class OtpError extends Error {
  * Issues a code and sends it. Throws `OtpError('COOLDOWN')` if one was requested for the
  * same phone and purpose within the cooldown, which is what stops this endpoint from being
  * used to bomb someone with SMS at our expense.
+ *
+ * Returns the plaintext code only when the mock provider is active — real SMS never
+ * echoes it back over HTTP. This is what lets a driver actually onboard on a staging
+ * deployment before DLT registration clears: without it, the only place the code exists
+ * is a server log the driver has no way to reach, which is a dead end disguised as a
+ * feature.
  */
-export async function issueOtp(phone: string, purpose: OtpPurpose, message: (code: string) => string) {
+export async function issueOtp(
+  phone: string,
+  purpose: OtpPurpose,
+  message: (code: string) => string,
+): Promise<{ devCode?: string }> {
   const recent = await prisma.otpChallenge.findFirst({
     where: { phone, purpose, consumedAt: null, createdAt: { gt: new Date(Date.now() - RESEND_COOLDOWN_MS) } },
     orderBy: { createdAt: "desc" },
@@ -79,7 +89,9 @@ export async function issueOtp(phone: string, purpose: OtpPurpose, message: (cod
     },
   });
 
-  await getSmsProvider().send(phone, message(code));
+  const provider = getSmsProvider();
+  await provider.send(phone, message(code));
+  return provider.name === "mock" ? { devCode: code } : {};
 }
 
 /**

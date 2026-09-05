@@ -36,8 +36,9 @@ authRouter.post("/request-otp", otpRequestLimiter, async (req, res) => {
   }
   const { phone } = parsed.data;
 
+  let devCode: string | undefined;
   try {
-    await issueOtp(phone, OtpPurpose.PHONE_VERIFICATION, (code) => `${code} is your TruckGo verification code.`);
+    ({ devCode } = await issueOtp(phone, OtpPurpose.PHONE_VERIFICATION, (code) => `${code} is your TruckGo verification code.`));
   } catch (e) {
     if (e instanceof OtpError) {
       return res.status(429).json({ error: { code: e.code, message: e.message } });
@@ -45,7 +46,10 @@ authRouter.post("/request-otp", otpRequestLimiter, async (req, res) => {
     throw e;
   }
 
-  return res.status(200).json({ message: "Verification code sent" });
+  // `devCode` only exists while the mock SMS provider is active (no DLT registration yet)
+  // — it is never present once a real provider is configured, so this can't leak a real
+  // code and doesn't need its own separate flag to gate it.
+  return res.status(200).json({ message: "Verification code sent", ...(devCode ? { devCode } : {}) });
 });
 
 // Returns a signed, short-lived token proving this phone was verified. Registration
@@ -383,9 +387,10 @@ authRouter.post("/forgot-password", otpRequestLimiter, async (req, res) => {
   const { phone } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { phone } });
+  let devCode: string | undefined;
   if (user) {
     try {
-      await issueOtp(phone, OtpPurpose.PASSWORD_RESET, (code) => `${code} is your TruckGo password reset code.`);
+      ({ devCode } = await issueOtp(phone, OtpPurpose.PASSWORD_RESET, (code) => `${code} is your TruckGo password reset code.`));
     } catch (e) {
       if (!(e instanceof OtpError)) throw e;
       // Swallowed deliberately: surfacing the cooldown here would reveal that this phone
@@ -393,8 +398,13 @@ authRouter.post("/forgot-password", otpRequestLimiter, async (req, res) => {
     }
   }
 
-  // Always 200 — don't leak whether a phone number is registered.
-  return res.status(200).json({ message: "If that phone is registered, a reset code was sent" });
+  // Always 200 — don't leak whether a phone number is registered. Note `devCode`'s
+  // presence *does* reveal that, same as the message is deliberately identical either
+  // way — acceptable only because this whole field only exists behind the mock-provider
+  // escape hatch, which is itself staging-only and must be gone before real users arrive.
+  return res
+    .status(200)
+    .json({ message: "If that phone is registered, a reset code was sent", ...(devCode ? { devCode } : {}) });
 });
 
 authRouter.post("/reset-password", otpVerifyLimiter, async (req, res) => {

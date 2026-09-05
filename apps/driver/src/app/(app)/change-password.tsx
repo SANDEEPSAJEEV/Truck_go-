@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { AppText } from '@/components/app-text';
 import { AppBar } from '@/components/ui/app-bar';
 import { TextField } from '@/components/ui/text-field';
@@ -38,7 +39,7 @@ export default function ChangePassword() {
   return (
     <Screen>
       <AppBar back title="Change Password" />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardScreen contentContainerStyle={styles.container}>
         <AppText color="onSurfaceVariant" style={DisplayType.bodyUi}>
           Choose a strong password of at least 8 characters.
         </AppText>
@@ -84,7 +85,7 @@ export default function ChangePassword() {
           loading={loading}
           disabled={!newPassword || !confirmPassword}
         />
-      </ScrollView>
+      </KeyboardScreen>
     </Screen>
   );
 }

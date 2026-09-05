@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { AppText } from '@/components/app-text';
 import { AppBar } from '@/components/ui/app-bar';
 import { TextField } from '@/components/ui/text-field';
@@ -54,7 +55,7 @@ export default function BankDetails() {
   return (
     <Screen>
       <AppBar back title="Bank Details" />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardScreen contentContainerStyle={styles.container}>
         <AppText color="onSurfaceVariant" style={DisplayType.bodyUi}>
           Update the account where your payouts are deposited. For security, your saved account number
           is always shown masked.
@@ -109,7 +110,7 @@ export default function BankDetails() {
           onPress={onSave}
           loading={saving}
         />
-      </ScrollView>
+      </KeyboardScreen>
     </Screen>
   );
 }

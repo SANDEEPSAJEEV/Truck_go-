@@ -261,6 +261,16 @@ export function LiveMap({
     animation.current = requestAnimationFrame(step);
   }, [driver?.lat, driver?.lng, driver?.heading, mapEpoch]);
 
+  // Mirrors the native map's fix: the mount effect above frames on whatever `center`/route
+  // was available at construction time and never re-runs, so on the dashboard (no route,
+  // no driver) the map would otherwise sit on the Kochi fallback forever, even once a real
+  // GPS fix arrives afterward.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || pickup || drop || driver || !center) return;
+    m.easeTo({ center: [center.lng, center.lat], duration: 600 });
+  }, [center?.lat, center?.lng, pickup, drop, driver, mapEpoch]);
+
   return (
     <View style={[styles.wrap, style]}>
       {/* react-native-web renders this as a real div, which is what MapLibre mounts into. */}

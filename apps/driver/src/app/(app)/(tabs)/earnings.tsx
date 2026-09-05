@@ -14,24 +14,7 @@ import { SectionLabel } from '@/components/ui/section-label';
 import { Brand, DisplayType } from '@/constants/display';
 import { Colors, FontFamily, Spacing, type StatusTone } from '@/constants/theme';
 import { apiFetch, ApiError } from '@/lib/api';
-
-type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
-
-type Trip = {
-  id?: string;
-  reference?: string;
-  dropAddress?: string;
-  completedAt: string | null;
-  actualFare: number | null;
-  estimatedFare: number;
-  paymentStatus?: PaymentStatus;
-};
-
-type EarningsResponse = {
-  totalEarnings: number;
-  completedTrips: number;
-  trips: Trip[];
-};
+import { fareOf, type EarningsResponse, type PaymentStatus, type Trip } from '@/lib/earnings';
 
 const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
   PENDING: 'warning',
@@ -41,10 +24,6 @@ const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
 };
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-function fareOf(t: Trip): number {
-  return t.actualFare ?? t.estimatedFare ?? 0;
-}
 
 function money(n: number): string {
   return `₹${n.toFixed(2)}`;

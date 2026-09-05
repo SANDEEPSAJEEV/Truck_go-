@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { AppText } from '@/components/app-text';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { AppBar } from '@/components/ui/app-bar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { TextField } from '@/components/ui/text-field';
 import { DisplayType } from '@/constants/display';
 import { Spacing } from '@/constants/theme';
 import { apiFetch, ApiError } from '@/lib/api';
+import { normalizePhone } from '@/lib/phone';
 
 export default function ForgotPassword() {
   const [phone, setPhone] = useState('');
@@ -20,13 +22,30 @@ export default function ForgotPassword() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Present only while real SMS isn't wired up yet — the backend omits this field once a
+  // real provider is configured.
+  const [devCode, setDevCode] = useState<string | null>(null);
 
   async function onSendCode() {
     setError('');
     setLoading(true);
+    // Same fix as login/register: the field's own placeholder shows a spaced format the
+    // backend's phoneSchema rejects outright.
+    const normalized = normalizePhone(phone);
     try {
-      await apiFetch('/auth/forgot-password', { method: 'POST', body: { phone }, auth: false });
+      const data = await apiFetch<{ devCode?: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: { phone: normalized },
+        auth: false,
+      });
+      setPhone(normalized);
       setSent(true);
+      if (data.devCode) {
+        setDevCode(data.devCode);
+        setCode(data.devCode);
+      } else {
+        setDevCode(null);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not send the reset code.');
     } finally {
@@ -58,8 +77,7 @@ export default function ForgotPassword() {
   return (
     <Screen>
       <AppBar back brand />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.body}>
+      <KeyboardScreen contentContainerStyle={styles.body}>
           <View style={styles.heading}>
             <AppText style={DisplayType.screenTitle}>Forgot your password?</AppText>
             <AppText color="onSurfaceVariant" style={DisplayType.bodyUi}>
@@ -111,6 +129,15 @@ export default function ForgotPassword() {
             ) : null}
           </Card>
 
+          {devCode ? (
+            <Card tone="warning">
+              <AppText color="onSecondaryContainer" style={DisplayType.bodyUi}>
+                Testing mode — real SMS isn&apos;t connected yet, so the code has been filled in
+                for you. It was: {devCode}
+              </AppText>
+            </Card>
+          ) : null}
+
           {error ? (
             <Card tone="danger">
               <AppText color="error" style={DisplayType.bodyUi}>
@@ -147,6 +174,7 @@ export default function ForgotPassword() {
               onPress={() => {
                 setSent(false);
                 setError('');
+                setDevCode(null);
               }}>
               Use a different number
             </AppText>
@@ -157,14 +185,12 @@ export default function ForgotPassword() {
               </AppText>
             </Link>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardScreen>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   body: { padding: Spacing.containerMargin, gap: Spacing.md, paddingBottom: Spacing.xl },
   heading: { gap: Spacing.xs, marginBottom: Spacing.xs },
   card: { gap: Spacing.md },

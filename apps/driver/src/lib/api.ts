@@ -8,7 +8,11 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const TOKEN_KEY = 'truckgo.accessToken';
 const REFRESH_KEY = 'truckgo.refreshToken';
-const REQUEST_TIMEOUT_MS = 30_000;
+// Render's free tier sleeps after ~15 min idle and documents a 30-60s worst-case wake time.
+// 30s was shorter than that: a cold request could time out client-side while the write
+// still completed server-side, and an immediate retry then landed inside the real
+// resend-cooldown window — two error-looking messages for what was actually one success.
+const REQUEST_TIMEOUT_MS = 50_000;
 
 /**
  * Wakes a sleeping server before the driver asks it for anything.

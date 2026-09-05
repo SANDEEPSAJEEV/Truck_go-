@@ -37,7 +37,11 @@ export function AppTabBar({ state, descriptors, navigation }: AppTabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom + Spacing.sm }]}>
+    // Math.max, not a flat addition: on a small `insets.bottom` (some gesture-nav Android
+    // phones report only a few px), the tap targets ended up sitting close enough to the
+    // system back-swipe zone to cause exactly the wrong kind of friction — a swipe meant
+    // as "go back" landing on a tab instead. Matches StickyBar's own floor for consistency.
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, Spacing.md) + Spacing.xs }]}>
       {state.routes.map((route, i) => {
         const focused = state.index === i;
         const label = descriptors[route.key]?.options.title ?? route.name;

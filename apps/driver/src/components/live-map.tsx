@@ -79,6 +79,19 @@ export function LiveMap({
     );
   }, [driver?.lat, driver?.lng, following]);
 
+  // `initialRegion` is a one-time native prop — react-native-maps ignores every value
+  // after the first. On the dashboard, `center` starts undefined (GPS hasn't resolved
+  // yet), so the map mounts on the Kochi fallback and, without this, never moves again
+  // even once a real fix arrives. Scoped to the no-route, no-driver case so it can't
+  // fight the trip screen's own driver-follow behaviour above.
+  useEffect(() => {
+    if (hasRoute || driver || !center || !mapRef.current) return;
+    mapRef.current.animateCamera(
+      { center: { latitude: center.lat, longitude: center.lng } },
+      { duration: 600 },
+    );
+  }, [center?.lat, center?.lng, hasRoute, driver]);
+
   return (
     <View style={[styles.wrap, style]}>
       <MapView

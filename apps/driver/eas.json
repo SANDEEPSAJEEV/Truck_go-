@@ -32,6 +32,10 @@
     },
     "preview": {
       "distribution": "internal",
+      // Same fix as "demo" above: this is the profile actually being iterated on now, and
+      // without it every rebuild ships the same versionCode as whatever's already
+      // installed on the test phone, which Android refuses to install over.
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       }

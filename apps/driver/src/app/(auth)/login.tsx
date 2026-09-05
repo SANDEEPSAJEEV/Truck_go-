@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { AppText } from '@/components/app-text';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { AppBar } from '@/components/ui/app-bar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -37,8 +38,7 @@ export default function Login() {
   return (
     <Screen>
       <AppBar back brand />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.body}>
+      <KeyboardScreen contentContainerStyle={styles.body}>
           <View style={styles.heading}>
             <AppText style={DisplayType.screenTitle}>Partner Login</AppText>
             <AppText color="onSurfaceVariant" style={DisplayType.bodyUi}>
@@ -93,14 +93,12 @@ export default function Login() {
               Don&apos;t have an account? Apply to Drive
             </AppText>
           </Link>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardScreen>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   body: { padding: Spacing.containerMargin, gap: Spacing.md, paddingBottom: Spacing.xl },
   heading: { gap: Spacing.xs, marginBottom: Spacing.xs },
   card: { gap: Spacing.md },

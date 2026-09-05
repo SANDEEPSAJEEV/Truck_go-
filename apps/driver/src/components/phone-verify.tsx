@@ -4,8 +4,9 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { TextField } from '@/components/ui/text-field';
 import { Button } from '@/components/ui/button';
-import { Spacing } from '@/constants/theme';
+import { Radii, Spacing } from '@/constants/theme';
 import { apiFetch, ApiError } from '@/lib/api';
+import { normalizePhone } from '@/lib/phone';
 
 const RESEND_SECONDS = 60;
 
@@ -26,6 +27,10 @@ export function PhoneVerify({ onVerified }: Props) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // Present only while real SMS isn't wired up yet (DLT registration pending) — the
+  // backend omits this field entirely once a real provider is configured, so there is
+  // nothing to remove here when that day comes.
+  const [devCode, setDevCode] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -48,10 +53,27 @@ export function PhoneVerify({ onVerified }: Props) {
   async function sendCode() {
     setError('');
     setBusy(true);
+    // The field's own placeholder shows "+91 98765 43210" — spaced, the way a person
+    // actually reads a number and the way one arrives pasted from Contacts. The backend
+    // rejects that exact shape. Normalizing here, once, before it's sent anywhere, means
+    // every screen that reuses this component gets the fix for free.
+    const normalized = normalizePhone(phone);
     try {
-      await apiFetch('/auth/request-otp', { method: 'POST', body: { phone }, auth: false });
+      const data = await apiFetch<{ devCode?: string }>('/auth/request-otp', {
+        method: 'POST',
+        body: { phone: normalized },
+        auth: false,
+      });
+      setPhone(normalized);
       setSent(true);
       startCooldown();
+      // Real SMS isn't live yet — auto-fill so there's nothing to go looking for.
+      if (data.devCode) {
+        setDevCode(data.devCode);
+        setCode(data.devCode);
+      } else {
+        setDevCode(null);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not send the code. Please try again.');
     } finally {
@@ -63,6 +85,9 @@ export function PhoneVerify({ onVerified }: Props) {
     setError('');
     setBusy(true);
     try {
+      // `phone` is already normalized by sendCode() by the time this can run — the field
+      // is read-only once `sent` is true, so the same value that was actually accepted by
+      // request-otp is what gets sent here too.
       const data = await apiFetch<{ verificationToken: string }>('/auth/verify-otp', {
         method: 'POST',
         body: { phone, code },
@@ -107,6 +132,15 @@ export function PhoneVerify({ onVerified }: Props) {
         />
       ) : null}
 
+      {devCode ? (
+        <View style={styles.devBanner}>
+          <AppText variant="bodySm" color="onSecondaryContainer">
+            Testing mode — real SMS isn&apos;t connected yet, so the code has been filled in for
+            you. It was: {devCode}
+          </AppText>
+        </View>
+      ) : null}
+
       {error ? (
         <AppText variant="bodySm" color="error">
           {error}
@@ -129,6 +163,7 @@ export function PhoneVerify({ onVerified }: Props) {
               setSent(false);
               setCode('');
               setError('');
+              setDevCode(null);
             }}
             disabled={busy}
           />
@@ -143,4 +178,11 @@ export function PhoneVerify({ onVerified }: Props) {
 const styles = StyleSheet.create({
   container: { gap: Spacing.md },
   code: { letterSpacing: 8, textAlign: 'center' },
+  devBanner: {
+    borderRadius: Radii.lg,
+    padding: Spacing.md,
+    backgroundColor: 'rgba(237,137,54,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(237,137,54,0.5)',
+  },
 });

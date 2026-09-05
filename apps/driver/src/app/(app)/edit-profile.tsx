@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { AppText } from '@/components/app-text';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { AppBar } from '@/components/ui/app-bar';
 import { TextField } from '@/components/ui/text-field';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,7 @@ export default function EditProfile() {
   return (
     <Screen>
       <AppBar back title="Edit Profile" />
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardScreen contentContainerStyle={styles.container}>
         <TextField
           label="Full Name"
           icon="person"
@@ -73,7 +74,7 @@ export default function EditProfile() {
           loading={saving}
           disabled={!fullName.trim()}
         />
-      </ScrollView>
+      </KeyboardScreen>
     </Screen>
   );
 }

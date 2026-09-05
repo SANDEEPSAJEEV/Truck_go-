@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { AppText } from '@/components/app-text';
+import { KeyboardScreen } from '@/components/keyboard-screen';
 import { PhoneVerify } from '@/components/phone-verify';
 import { AppBar } from '@/components/ui/app-bar';
 import { Button } from '@/components/ui/button';
@@ -95,21 +96,19 @@ export default function Register() {
     return (
       <Screen>
         <AppBar back brand />
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={styles.body}>
-            <PhoneVerify
-              onVerified={(verifiedPhone, token) => {
-                setPhone(verifiedPhone);
-                setVerificationToken(token);
-              }}
-            />
-            <Link href="/(auth)/login" style={styles.link}>
-              <AppText variant="bodySm" color="primary">
-                Already have an account? Login here
-              </AppText>
-            </Link>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <KeyboardScreen contentContainerStyle={styles.body}>
+          <PhoneVerify
+            onVerified={(verifiedPhone, token) => {
+              setPhone(verifiedPhone);
+              setVerificationToken(token);
+            }}
+          />
+          <Link href="/(auth)/login" style={styles.link}>
+            <AppText variant="bodySm" color="primary">
+              Already have an account? Login here
+            </AppText>
+          </Link>
+        </KeyboardScreen>
       </Screen>
     );
   }
@@ -124,8 +123,49 @@ export default function Register() {
   return (
     <Screen>
       <AppBar back brand step={{ current: step, total: 3 }} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.body}>
+      <KeyboardScreen
+        contentContainerStyle={styles.body}
+        footer={
+          <StickyBar>
+            {step > 1 ? (
+              <Button
+                label="Back"
+                variant="outlineNavy"
+                size="lg"
+                style={styles.back}
+                onPress={() => {
+                  setError('');
+                  setStep((s) => s - 1);
+                }}
+              />
+            ) : null}
+            {step < 3 ? (
+              <Button
+                label="Continue"
+                variant="orange"
+                size="lg"
+                icon="arrow-forward"
+                style={styles.next}
+                disabled={!canContinue}
+                onPress={() => {
+                  setError('');
+                  setStep((s) => s + 1);
+                }}
+              />
+            ) : (
+              <Button
+                label="Complete Registration"
+                variant="orange"
+                size="lg"
+                icon="check-circle"
+                style={styles.next}
+                loading={loading}
+                disabled={!canContinue}
+                onPress={onSubmit}
+              />
+            )}
+          </StickyBar>
+        }>
           <Stepper steps={STEPS} current={step} />
 
           {step === 1 ? (
@@ -230,48 +270,7 @@ export default function Register() {
               </AppText>
             </Card>
           ) : null}
-        </ScrollView>
-
-        <StickyBar>
-          {step > 1 ? (
-            <Button
-              label="Back"
-              variant="outlineNavy"
-              size="lg"
-              style={styles.back}
-              onPress={() => {
-                setError('');
-                setStep((s) => s - 1);
-              }}
-            />
-          ) : null}
-          {step < 3 ? (
-            <Button
-              label="Continue"
-              variant="orange"
-              size="lg"
-              icon="arrow-forward"
-              style={styles.next}
-              disabled={!canContinue}
-              onPress={() => {
-                setError('');
-                setStep((s) => s + 1);
-              }}
-            />
-          ) : (
-            <Button
-              label="Complete Registration"
-              variant="orange"
-              size="lg"
-              icon="check-circle"
-              style={styles.next}
-              loading={loading}
-              disabled={!canContinue}
-              onPress={onSubmit}
-            />
-          )}
-        </StickyBar>
-      </KeyboardAvoidingView>
+      </KeyboardScreen>
     </Screen>
   );
 }

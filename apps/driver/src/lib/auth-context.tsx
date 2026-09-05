@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { apiFetch, ApiError, clearTokens, getAccessToken, setTokens } from '@/lib/api';
 import { unregisterPush } from '@/lib/push';
+import { normalizePhone } from '@/lib/phone';
 
 // Confirmed camelCase values, decompiled_user.js ~403688-403694.
 export type VehicleType = 'miniTruck' | 'pickup' | 'tataAce' | 'tempo' | 'largeTruck' | 'container';
@@ -94,9 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(phone: string, password: string) {
+    // The login field's placeholder shows "+91 98765 43210" — the backend's phoneSchema
+    // rejects the embedded spaces outright. Normalizing here, not in the screen, means
+    // every current and future caller of login() gets this for free.
     const data = await apiFetch<{ user: TruckGoDriver; accessToken: string; refreshToken: string }>(
       '/auth/driver',
-      { method: 'POST', body: { phone, password }, auth: false },
+      { method: 'POST', body: { phone: normalizePhone(phone), password }, auth: false },
     );
     await setTokens(data.accessToken, data.refreshToken);
     await refreshUser();
