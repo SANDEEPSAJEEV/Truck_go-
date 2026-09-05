@@ -36,6 +36,12 @@
       // without it every rebuild ships the same versionCode as whatever's already
       // installed on the test phone, which Android refuses to install over.
       "autoIncrement": true,
+      // Named explicitly rather than left to default to `production`, which holds only the
+      // Maps key — no EXPO_PUBLIC_API_URL. Without this the app falls back to
+      // http://localhost:3001 and every request fails on a real phone, which is a whole
+      // build spent discovering that. The `preview` environment carries the API URL,
+      // EXPO_PUBLIC_DEMO=0 and the Maps key.
+      "environment": "preview",
       "android": {
         "buildType": "apk"
       }
