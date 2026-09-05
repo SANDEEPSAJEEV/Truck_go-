@@ -4,6 +4,34 @@ import { DEMO_MODE, demoSocket } from '@/lib/demo';
 
 let socket: Socket | null = null;
 
+/**
+ * Rebuilds the client with a fresh token whenever the handshake is rejected.
+ *
+ * The server verifies the access token on connect, and access tokens last 15 minutes. A
+ * socket that drops after that — a tunnel, a lift, a screen lock — reconnects with the token
+ * it was constructed with, is refused, and stays dead. Nothing surfaces: live tracking simply
+ * stops updating and the map quietly freezes on the last known position.
+ *
+ * `getAccessToken()` returns whatever `apiFetch` last refreshed, so re-reading it here is
+ * enough to recover.
+ */
+function attachAuthRecovery(client: Socket): void {
+  let recovering = false;
+  client.on('connect_error', async (err: Error) => {
+    if (!err?.message?.includes('unauthorized') || recovering) return;
+    recovering = true;
+    try {
+      const fresh = await getAccessToken();
+      if (fresh) {
+        client.auth = { token: fresh };
+        client.connect();
+      }
+    } finally {
+      recovering = false;
+    }
+  });
+}
+
 export async function getSocket(): Promise<Socket> {
   // Demo mode swaps in a simulator that emits status, PIN and location events locally, so
   // live tracking is visible with no server and no driver app running.
@@ -12,6 +40,7 @@ export async function getSocket(): Promise<Socket> {
   if (socket?.connected) return socket;
   const token = await getAccessToken();
   socket = io(API_URL, { path: '/socket.io', auth: { token }, transports: ['websocket'] });
+  attachAuthRecovery(socket);
   return socket;
 }
 

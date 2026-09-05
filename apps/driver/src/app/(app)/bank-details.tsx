@@ -16,7 +16,11 @@ import { apiFetch, ApiError } from '@/lib/api';
 // decompiled_driver.js:422407+ (accountHolderName / bankAccountNumber / ifscCode).
 export default function BankDetails() {
   const [accountHolderName, setAccountHolderName] = useState('');
+  // Left empty on load, deliberately. The server returns the account number masked, and
+  // putting that mask in an editable field means a driver correcting a typo in their name
+  // would save "••••••9012" back as their account number.
   const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [savedAccountMask, setSavedAccountMask] = useState('');
   const [ifscCode, setIfscCode] = useState('');
   const [loadError, setLoadError] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -24,12 +28,16 @@ export default function BankDetails() {
 
   function load() {
     setLoadError('');
-    apiFetch<{ accountHolderName: string | null; bankAccountNumber: string | null; ifscCode: string | null }>(
-      '/drivers/bank-details',
-    )
+    apiFetch<{
+      accountHolderName: string | null;
+      bankAccountNumber: string | null;
+      hasBankAccountNumber?: boolean;
+      ifscCode: string | null;
+    }>('/drivers/bank-details')
       .then((d) => {
         setAccountHolderName(d.accountHolderName ?? '');
-        setBankAccountNumber(d.bankAccountNumber ?? '');
+        setSavedAccountMask(d.hasBankAccountNumber === false ? '' : (d.bankAccountNumber ?? ''));
+        setBankAccountNumber('');
         setIfscCode(d.ifscCode ?? '');
       })
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : 'Could not load your bank details.'));
@@ -37,13 +45,24 @@ export default function BankDetails() {
 
   useEffect(load, []);
 
+  // Nothing saved on file and nothing typed means there is no account to pay into — and the
+  // fields used to accept empty strings all the way through to the database, quietly wiping
+  // whatever was there.
+  const needsAccountNumber = !savedAccountMask && !bankAccountNumber.trim();
+  const canSave = Boolean(accountHolderName.trim()) && Boolean(ifscCode.trim()) && !needsAccountNumber;
+
   async function onSave() {
     setSaving(true);
     setSaveError('');
     try {
       await apiFetch('/drivers/bank-details', {
         method: 'PUT',
-        body: { accountHolderName, bankAccountNumber, ifscCode },
+        body: {
+          accountHolderName: accountHolderName.trim(),
+          ifscCode: ifscCode.trim().toUpperCase(),
+          // Omitted entirely when untouched, which the server reads as "leave it as it is".
+          ...(bankAccountNumber.trim() ? { bankAccountNumber: bankAccountNumber.trim() } : {}),
+        },
       });
       router.back();
     } catch (e) {
@@ -57,8 +76,8 @@ export default function BankDetails() {
       <AppBar back title="Bank Details" />
       <KeyboardScreen contentContainerStyle={styles.container}>
         <AppText color="onSurfaceVariant" style={DisplayType.bodyUi}>
-          Update the account where your payouts are deposited. For security, your saved account number
-          is always shown masked.
+          Update the account where your payouts are deposited. For security your saved account
+          number is only ever shown masked — leave the field blank to keep it as it is.
         </AppText>
 
         {loadError ? (
@@ -80,11 +99,16 @@ export default function BankDetails() {
         <TextField
           label="Account Number"
           icon="account-balance"
-          placeholder="Bank account number"
+          placeholder={savedAccountMask || 'Bank account number'}
           mono
           value={bankAccountNumber}
           onChangeText={setBankAccountNumber}
           keyboardType="number-pad"
+          helper={
+            savedAccountMask
+              ? `Currently ${savedAccountMask}. Type a new number only if you're changing it.`
+              : undefined
+          }
         />
         <TextField
           label="IFSC Code"
@@ -109,6 +133,7 @@ export default function BankDetails() {
           icon="check"
           onPress={onSave}
           loading={saving}
+          disabled={!canSave}
         />
       </KeyboardScreen>
     </Screen>

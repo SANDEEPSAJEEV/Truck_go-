@@ -138,6 +138,28 @@ export default function Trip() {
     };
   }, [id]);
 
+  // The trip can change without this driver doing anything — the rider can cancel it while
+  // they are driving to the pickup. Without this the screen kept offering "Arrived at pickup"
+  // for a job that no longer existed, and the driver only found out when the server refused
+  // the transition.
+  useEffect(() => {
+    let cleanup = () => {};
+    getSocket().then((socket) => {
+      const leaveTrip = subscribeToTrip(socket, id);
+      const onStatus = () => load();
+      socket.on('trip:status', onStatus);
+      cleanup = () => {
+        socket.off('trip:status', onStatus);
+        leaveTrip();
+      };
+    });
+    return () => cleanup();
+    // Subscribed once per trip. `load` is re-declared each render but only reads `id` and
+    // calls setState, so holding the first render's copy is harmless — and listing it would
+    // tear down and rebuild the socket listener on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   // Stream live GPS to the rider whenever the driver is actively moving toward them.
   useEffect(() => {
     if (!booking || !TRACKED_STATUSES.includes(booking.status)) return;

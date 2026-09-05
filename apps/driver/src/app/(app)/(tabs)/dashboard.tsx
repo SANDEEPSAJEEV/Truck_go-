@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { FlatList, Pressable, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
@@ -54,7 +54,11 @@ export default function Dashboard() {
   const verificationStatus = user?.driverProfile?.verificationStatus ?? 'PENDING';
   const approved = verificationStatus === 'APPROVED';
 
-  const [online, setOnline] = useState(false);
+  // Seeded from the server's own view, not `false`. Going online is a server-side state that
+  // outlives the app: a driver who went online yesterday is still on the dispatch board this
+  // morning, and starting the toggle at "Offline" told them the opposite while loads were
+  // still being sent to them.
+  const [online, setOnline] = useState(Boolean(user?.driverProfile?.isOnline));
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
   // Feed errors and action errors are tracked separately: a background poll succeeding
@@ -149,7 +153,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [online, loadFeed]);
 
+  // Until the driver touches the toggle, the server's value is the truth — `refreshUser()`
+  // runs after login and on profile changes, and the switch should follow it. Once they have
+  // toggled it themselves, their intent wins and a later refresh must not flip it back
+  // underneath them.
+  const toggledHere = useRef(false);
+  const serverOnline = user?.driverProfile?.isOnline;
+  useEffect(() => {
+    if (toggledHere.current || serverOnline === undefined) return;
+    setOnline(serverOnline);
+  }, [serverOnline]);
+
   async function toggleOnline(next: boolean) {
+    toggledHere.current = true;
     setOnline(next);
     setActionError('');
     try {

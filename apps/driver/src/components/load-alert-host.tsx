@@ -8,7 +8,7 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/ui/button';
 import { Brand, DisplayType } from '@/constants/display';
 import { Colors, FontFamily, Radii, Shadows, Spacing } from '@/constants/theme';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { getNotificationPrefs } from '@/lib/notification-prefs';
 import { vehicleLabel } from '@/lib/vehicle';
@@ -37,17 +37,16 @@ export function LoadAlertHost() {
   const insets = useSafeAreaInsets();
   const [load, setLoad] = useState<LoadPayload | null>(null);
   const [busy, setBusy] = useState(false);
+  // A failed Accept used to be indistinguishable from a successful one: the card slid away
+  // either way. A driver who thinks they took a load and didn't will sit waiting for a trip.
+  const [error, setError] = useState('');
   const slide = useRef(new Animated.Value(-200)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read inside the socket handler, so toggling the preference takes effect without
-  // re-subscribing.
-  const alertsEnabled = useRef(true);
-
-  useEffect(() => {
-    getNotificationPrefs().then((p) => {
-      alertsEnabled.current = p.newLoadAlerts;
-    });
-  }, []);
+  // No cached copy of the preference. This component is mounted in the authenticated layout
+  // and lives for the whole session, so reading it once on mount meant switching "New load
+  // alerts" off in settings did nothing until the driver relaunched the app. It is a local
+  // AsyncStorage read on an event that arrives a few times an hour — reading it fresh each
+  // time is cheaper than the bug was.
 
   const dismiss = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -60,8 +59,9 @@ export function LoadAlertHost() {
     let cleanup = () => {};
 
     getSocket().then((socket) => {
-      const onNew = (payload: LoadPayload) => {
-        if (!alertsEnabled.current) return;
+      const onNew = async (payload: LoadPayload) => {
+        const prefs = await getNotificationPrefs();
+        if (!prefs.newLoadAlerts) return;
         setLoad(payload);
       };
       // If someone else wins it, the offer on screen is no longer real — pull it rather
@@ -102,17 +102,33 @@ export function LoadAlertHost() {
 
   async function accept() {
     if (!load) return;
+    // The fare arrives over the socket and has to be a number the server will accept as a
+    // bid. It used to be sent as a Prisma Decimal, which serialises to a string, so every
+    // Accept here failed validation — and the catch-all below swallowed it, so it looked
+    // like it had worked. The server side is fixed; this guards the value regardless.
+    const amount = Number(load.estimatedFare);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Couldn't read the fare for this load. Open it from the dashboard to bid.");
+      return;
+    }
+
+    setError('');
     setBusy(true);
     try {
       await apiFetch(`/bookings/${load.bookingId}/bids`, {
         method: 'POST',
-        body: { amount: load.estimatedFare ?? 0 },
+        body: { amount },
       });
       dismiss();
-    } catch {
-      // Losing the race is the common case — the card is stale either way, so take it
-      // down and let the dashboard feed show what's actually still open.
-      dismiss();
+    } catch (e) {
+      // Losing the race is the common case and genuinely isn't worth a message — the card
+      // is stale either way. Anything else is not: a driver who thinks they just accepted a
+      // load and didn't will sit waiting for a trip that was never theirs.
+      if (e instanceof ApiError && (e.code === 'NOT_OPEN' || e.code === 'NOT_FOUND')) {
+        dismiss();
+      } else {
+        setError(e instanceof ApiError ? e.message : "Couldn't place that bid. Please try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -169,6 +185,12 @@ export function LoadAlertHost() {
             {load.estimatedFare != null ? `₹${load.estimatedFare}` : '—'}
           </AppText>
         </View>
+
+        {error ? (
+          <AppText color="error" style={DisplayType.bodyUi}>
+            {error}
+          </AppText>
+        ) : null}
 
         <View style={styles.actions}>
           <Button label="View" variant="outlineNavy" style={styles.flex} onPress={view} />

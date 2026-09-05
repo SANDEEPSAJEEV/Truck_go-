@@ -22,6 +22,11 @@ export async function setTokens(accessToken: string, refreshToken?: string) {
   if (refreshToken) await AsyncStorage.setItem(REFRESH_KEY, refreshToken);
 }
 
+/** The stored refresh token, so sign-out can revoke it server-side rather than just forgetting it. */
+export async function getRefreshToken(): Promise<string | null> {
+  return AsyncStorage.getItem(REFRESH_KEY);
+}
+
 export async function clearTokens() {
   await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_KEY]);
 }

@@ -103,7 +103,11 @@ export default function Trips() {
               // only ever a necessary stop for anything still unpaid.
               if (item.status === 'DELIVERED') return router.push(`/(app)/payment/${item.id}`);
               if (ACTIVE_STATUSES.includes(item.status)) return router.push(`/(app)/track/${item.id}`);
-              return router.push(`/(app)/feedback/${item.id}`);
+              // Cancelled, rejected and no-driver-found used to land on the feedback screen,
+              // which asked the customer to rate a driver for a trip that never happened —
+              // and, for a booking with no driver at all, could not submit anything anyway.
+              // There is nothing to open for these, so the card simply isn't a link.
+              return;
             }}>
             <View style={styles.cardHeader}>
               <AppText variant="labelCaps" color="onSurfaceVariant" uppercase>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { apiFetch, ApiError, clearTokens, getAccessToken, setTokens } from '@/lib/api';
+import { apiFetch, ApiError, clearTokens, getAccessToken, getRefreshToken, setTokens } from '@/lib/api';
+import { disconnectSocket } from '@/lib/socket';
 
 export type TruckGoUser = {
   id: string;
@@ -79,7 +80,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(input.phone, input.password);
   }
 
+  /**
+   * Ends the session on the server as well as on the device.
+   *
+   * Clearing tokens locally only makes the app forget them — the refresh token stayed valid
+   * for its full 30 days, so anyone who had captured it could keep minting access tokens for
+   * an account its owner believes they signed out of. The socket also survived, still joined
+   * to the previous user's rooms and still receiving their events.
+   */
   async function logout() {
+    // Best effort, and deliberately not allowed to block the sign-out: if the network is
+    // down, the user still gets signed out on this device.
+    await apiFetch('/auth/logout', {
+      method: 'POST',
+      body: { refreshToken: await getRefreshToken() },
+    }).catch(() => {});
+    disconnectSocket();
     await clearTokens();
     setUser(null);
   }

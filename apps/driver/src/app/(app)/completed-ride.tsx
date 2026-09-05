@@ -139,8 +139,18 @@ export default function CompletedRide() {
         <AppText variant="bodyLg">Pickup: {booking.pickupAddress}</AppText>
         <AppText variant="bodyLg">Drop-off: {booking.dropAddress}</AppText>
 
+        {/* The feedback screen existed but nothing ever navigated to it, so a driver had no
+            way to rate a customer at all and no driver-to-rider rating was ever written.
+            This is the one moment it belongs: the trip just ended and both parties are
+            fresh in mind. */}
+        <Button
+          label="Rate Customer"
+          variant="orange"
+          icon="star-outline"
+          onPress={() => router.replace(`/(app)/feedback/${id}`)}
+        />
         <Button label="View Earnings" variant="navy" onPress={() => router.replace('/(app)/(tabs)/earnings')} />
-        <Button label="Go To Dashboard" onPress={() => router.replace('/(app)/(tabs)/dashboard')} />
+        <Button label="Go To Dashboard" variant="outline" onPress={() => router.replace('/(app)/(tabs)/dashboard')} />
       </View>
     </Screen>
   );

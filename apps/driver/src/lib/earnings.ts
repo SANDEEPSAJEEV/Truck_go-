@@ -1,4 +1,7 @@
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+// 'NONE' is what GET /payments/:id returns for a delivered trip nobody has opened a payment
+// for yet. It was missing here, so anything indexing a lookup table by this type got
+// `undefined` for the one status a just-completed trip most often has.
+export type PaymentStatus = 'NONE' | 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 
 export type Trip = {
   id?: string;

@@ -353,7 +353,8 @@ export default function Tracking() {
                   <View style={{ flex: 1 }}>
                     <AppText variant="headlineSm">{bid.driver.fullName}</AppText>
                     <AppText variant="bodySm" color="onSurfaceVariant">
-                      ★ {bid.driver.ratingAvg.toFixed(1)} ({bid.driver.ratingCount}) · {bid.driver.vehicleNumber}
+                      ★ {(bid.driver.ratingAvg ?? 0).toFixed(1)} ({bid.driver.ratingCount ?? 0}) ·{' '}
+                      {bid.driver.vehicleNumber}
                     </AppText>
                     {bid.note ? (
                       <AppText variant="bodySm" color="onSurfaceVariant">

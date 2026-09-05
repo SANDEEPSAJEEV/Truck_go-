@@ -17,6 +17,8 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { fareOf, type EarningsResponse, type PaymentStatus, type Trip } from '@/lib/earnings';
 
 const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
+  // Delivered, payment not opened yet — informational, not a warning about anything.
+  NONE: 'info',
   PENDING: 'warning',
   PAID: 'success',
   FAILED: 'danger',

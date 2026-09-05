@@ -47,11 +47,11 @@ export default function ChangePassword() {
         <TextField
           label="Current Password"
           icon="lock-outline"
-          placeholder="Leave blank if you use OTP login"
+          placeholder="Your current password"
           secureTextEntry
           value={currentPassword}
           onChangeText={setCurrentPassword}
-          helper="If you've never set a password (OTP-only account), leave this empty."
+          helper="Forgotten it? Sign out and use 'Forgot Password' to reset it by SMS."
         />
         <TextField
           label="New Password"
@@ -83,7 +83,7 @@ export default function ChangePassword() {
           icon="check"
           onPress={onSubmit}
           loading={loading}
-          disabled={!newPassword || !confirmPassword}
+          disabled={!currentPassword || !newPassword || !confirmPassword}
         />
       </KeyboardScreen>
     </Screen>
