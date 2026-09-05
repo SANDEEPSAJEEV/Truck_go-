@@ -63,17 +63,29 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
   // The cost of getting it wrong is not a retry — it is a logout. Both apps call
   // `clearTokens()` when a refresh comes back 401, so a storage blip silently signs a real
   // user out. One short re-read is a much better trade than that.
-  // Measured: a token left to age ten seconds was accepted 8 times out of 8, while one
-  // refreshed immediately after login failed about one time in three — so the window is
-  // short, real, and worth waiting out rather than turning into a logout.
+  // Measured against the deployed database: a token left to age ten seconds was accepted 8
+  // times out of 8, while one used immediately after login failed about one time in three,
+  // and succeeded on a retry a few seconds later. So the window is real and bounded, and
+  // waiting it out beats the alternative — the apps sign the user out on a failed refresh.
+  //
+  // Six seconds of ceiling looks generous for an endpoint, but only a miss ever pays it: the
+  // overwhelming majority of refreshes are for tokens minted long ago and return on the first
+  // query. A ladder that stopped at 2.5s still let this through.
   const tokenHash = hashToken(presentedToken);
   let stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-  for (const backoffMs of [250, 750, 1500]) {
+  let waitedMs = 0;
+  for (const backoffMs of [250, 500, 1000, 1500, 2750]) {
     if (stored) break;
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    waitedMs += backoffMs;
     stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
   }
   if (!stored) throw new SessionError("INVALID_REFRESH");
+  if (waitedMs > 0) {
+    // Logged rather than silent: if this starts happening often, or the wait creeps up, that
+    // is a storage problem worth knowing about rather than one permanently papered over.
+    console.warn(`[sessions] refresh token row appeared only after ${waitedMs}ms`);
+  }
 
   if (stored.rotatedAt || stored.revokedAt) {
     await revokeFamily(stored.familyId);
