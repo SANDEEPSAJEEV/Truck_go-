@@ -61,7 +61,13 @@ app.post("/payments/webhook", express.raw({ type: "application/json", limit: "1m
 app.use(express.json({ limit: "1mb" }));
 app.use(generalLimiter);
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// `commit` answers the question every deploy raises: is the code I just pushed the code that
+// is actually running? Without it, a test run against a stale deployment reports fixed bugs as
+// still broken and there is no way to tell that from a real regression. Render sets
+// RENDER_GIT_COMMIT on the builder; it is a public commit SHA, not a secret.
+app.get("/health", (_req, res) =>
+  res.json({ ok: true, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? "local" }),
+);
 
 app.use("/auth", authRouter);
 // Confirmed as two separate service surfaces in the original — /bookings owns pre-trip
