@@ -112,25 +112,32 @@ suite("notifications", "09 — Notifications & devices", () => {
 
   /* -------------------------------------------------------------------- devices */
 
+  // Registered against riders, not drivers, on purpose.
+  //
+  // These tokens are fabricated, so Expo answers DeviceNotRegistered for them — and
+  // ExpoPushProvider correctly prunes a token it is told is dead. Hang them off a driver and
+  // any dispatch during this suite pushes to them and deletes the row underneath the test.
+  // Riders are never push targets, so the row stays put and these cases test the endpoint
+  // instead of racing the push pipeline.
   const tokenA = `ExponentPushToken[e2e-a-${Date.now()}]`;
 
   test("9.9", "registering a push token stores one row", async () => {
     const res = await api("/devices/register", {
       method: "POST",
-      token: ctx.driverA.accessToken,
+      token: ctx.rider.accessToken,
       body: { expoPushToken: tokenA, platform: "android" },
     });
     expect(res.status, "status").toBe(204);
 
     const row = await db.device.findUniqueOrThrow({ where: { expoPushToken: tokenA } });
-    expect(row.userId, "owner").toBe(ctx.driverA.id);
+    expect(row.userId, "owner").toBe(ctx.rider.id);
     expect(row.platform, "platform").toBe("android");
   });
 
   test("9.10", "registering the same token twice does not duplicate it", async () => {
     const again = await api("/devices/register", {
       method: "POST",
-      token: ctx.driverA.accessToken,
+      token: ctx.rider.accessToken,
       body: { expoPushToken: tokenA, platform: "android" },
     });
     expect(again.status, "second registration").toBe(204);
@@ -146,13 +153,13 @@ suite("notifications", "09 — Notifications & devices", () => {
     // Otherwise the previous driver's loads would follow the hardware.
     const res = await api("/devices/register", {
       method: "POST",
-      token: ctx.driverB.accessToken,
+      token: ctx.rider2.accessToken,
       body: { expoPushToken: tokenA, platform: "android" },
     });
     expect(res.status, "status").toBe(204);
 
     const row = await db.device.findUniqueOrThrow({ where: { expoPushToken: tokenA } });
-    expect(row.userId, "new owner").toBe(ctx.driverB.id);
+    expect(row.userId, "new owner").toBe(ctx.rider2.id);
     expect(await db.device.count({ where: { expoPushToken: tokenA } }), "still one row").toBe(1);
   });
 
@@ -162,7 +169,7 @@ suite("notifications", "09 — Notifications & devices", () => {
       { expoPushToken: `ExponentPushToken[ok-${Date.now()}]`, platform: "symbian" },
       { platform: "android" },
     ]) {
-      const res = await api("/devices/register", { method: "POST", token: ctx.driverA.accessToken, body });
+      const res = await api("/devices/register", { method: "POST", token: ctx.rider.accessToken, body });
       expect(res.status, `status for ${JSON.stringify(body)}`).toBe(400);
     }
   });
@@ -170,7 +177,7 @@ suite("notifications", "09 — Notifications & devices", () => {
   test("9.13", "a token you do not own is not yours to delete", async () => {
     const res = await api(`/devices/${encodeURIComponent(tokenA)}`, {
       method: "DELETE",
-      token: ctx.driverA.accessToken,
+      token: ctx.rider.accessToken,
     });
     // Scoped delete: 204 either way, but the row must survive since driverB owns it now.
     expect(res.status, "status").toBe(204);
@@ -180,7 +187,7 @@ suite("notifications", "09 — Notifications & devices", () => {
   test("9.14", "the owner can delete their own token", async () => {
     const res = await api(`/devices/${encodeURIComponent(tokenA)}`, {
       method: "DELETE",
-      token: ctx.driverB.accessToken,
+      token: ctx.rider2.accessToken,
     });
     expect(res.status, "status").toBe(204);
     expect(await db.device.count({ where: { expoPushToken: tokenA } }), "row gone").toBe(0);
