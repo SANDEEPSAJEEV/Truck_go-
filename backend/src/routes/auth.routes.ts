@@ -340,7 +340,13 @@ authRouter.post("/refresh", async (req, res) => {
         },
       });
     }
-    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid refresh token" } });
+    // The reason is carried through rather than flattened. Every one of these still ends the
+    // session for the client, but "we could not find this token" and "this token is not ours"
+    // are different operational problems, and answering the same opaque code to both left an
+    // intermittent failure with nothing to go on.
+    const code = e instanceof SessionError ? e.code : "UNAUTHORIZED";
+    if (code === "NOT_FOUND") console.warn("[auth] refresh presented a well-formed token we have no row for");
+    return res.status(401).json({ error: { code, message: "Invalid refresh token" } });
   }
 });
 

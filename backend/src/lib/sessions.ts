@@ -29,7 +29,7 @@ export async function issueSession(payload: AccessTokenPayload): Promise<IssuedS
 }
 
 export class SessionError extends Error {
-  constructor(public code: "INVALID_REFRESH" | "REUSE_DETECTED") {
+  constructor(public code: "INVALID_SIGNATURE" | "NOT_FOUND" | "EXPIRED" | "REUSE_DETECTED") {
     super(code);
   }
 }
@@ -48,29 +48,21 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
   try {
     payload = verifyRefreshToken(presentedToken);
   } catch {
-    throw new SessionError("INVALID_REFRESH");
+    // The JWT itself did not verify: wrong signature, or past its 30-day expiry. Permanent,
+    // and distinct from a token we simply cannot find — conflating the two made an
+    // intermittent failure impossible to diagnose from the outside.
+    throw new SessionError("INVALID_SIGNATURE");
   }
 
-  // Two different failures hide behind "we don't have this token".
+  // Reaching here means the JWT is genuinely ours, so a missing row is not the caller's
+  // fault — and it may not even be true. A refresh fired moments after a login can run
+  // before that login's own INSERT is visible to this query; measured against the deployed
+  // database, a token left to age ten seconds was accepted 8 times out of 8, while one used
+  // immediately after login failed roughly one time in three and succeeded on a retry.
   //
-  // A token whose signature or expiry is wrong is permanently invalid, and `verifyRefreshToken`
-  // above has already rejected it. Reaching here means the JWT is genuinely ours — so a
-  // missing row is not the client's fault, and occasionally it is not even true: a refresh
-  // fired moments after login can run before that login's INSERT is visible to this query,
-  // and the row appears a second later. Measured against the deployed database, roughly one
-  // in three logins followed immediately by a refresh hit this.
-  //
-  // The cost of getting it wrong is not a retry — it is a logout. Both apps call
-  // `clearTokens()` when a refresh comes back 401, so a storage blip silently signs a real
-  // user out. One short re-read is a much better trade than that.
-  // Measured against the deployed database: a token left to age ten seconds was accepted 8
-  // times out of 8, while one used immediately after login failed about one time in three,
-  // and succeeded on a retry a few seconds later. So the window is real and bounded, and
-  // waiting it out beats the alternative — the apps sign the user out on a failed refresh.
-  //
-  // Six seconds of ceiling looks generous for an endpoint, but only a miss ever pays it: the
-  // overwhelming majority of refreshes are for tokens minted long ago and return on the first
-  // query. A ladder that stopped at 2.5s still let this through.
+  // The cost of getting this wrong is not a retry, it is a logout: both apps call
+  // `clearTokens()` when a refresh comes back 401. Only a miss pays the wait, and the
+  // overwhelming majority of refreshes are for tokens minted long ago.
   const tokenHash = hashToken(presentedToken);
   let stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
   let waitedMs = 0;
@@ -80,7 +72,7 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
     waitedMs += backoffMs;
     stored = await prisma.refreshToken.findUnique({ where: { tokenHash } });
   }
-  if (!stored) throw new SessionError("INVALID_REFRESH");
+  if (!stored) throw new SessionError("NOT_FOUND");
   if (waitedMs > 0) {
     // Logged rather than silent: if this starts happening often, or the wait creeps up, that
     // is a storage problem worth knowing about rather than one permanently papered over.
@@ -92,7 +84,7 @@ export async function rotateSession(presentedToken: string): Promise<IssuedSessi
     throw new SessionError("REUSE_DETECTED");
   }
 
-  if (stored.expiresAt < new Date()) throw new SessionError("INVALID_REFRESH");
+  if (stored.expiresAt < new Date()) throw new SessionError("EXPIRED");
 
   const nextToken = signRefreshToken({ sub: payload.sub, role: payload.role, familyId: stored.familyId });
 
