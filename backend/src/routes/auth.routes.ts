@@ -322,7 +322,7 @@ authRouter.post("/admin", loginLimiter, (req, res) => login("ADMIN", req, res));
 /* Session lifecycle                                                           */
 /* -------------------------------------------------------------------------- */
 
-authRouter.post("/refresh", async (req, res) => {
+authRouter.post("/refresh", async (req, res, next) => {
   const { refreshToken } = req.body ?? {};
   if (!refreshToken) {
     return res.status(400).json({ error: { code: "VALIDATION", message: "refreshToken required" } });
@@ -340,13 +340,27 @@ authRouter.post("/refresh", async (req, res) => {
         },
       });
     }
+    // Only a *decided* rejection ends the session. Anything else — a dropped database
+    // connection, a constraint we did not anticipate — is our failure, not the client's, and
+    // it must not be dressed up as "your token is invalid": both apps clear their tokens on a
+    // 401 from this endpoint, so an unexpected exception here silently signed a real user
+    // out and left nothing behind to explain why. It now surfaces as a 500, which the apps
+    // treat as a transient error and retry.
+    if (!(e instanceof SessionError)) {
+      console.error("[auth] refresh failed unexpectedly:", e);
+      // Handed to the error middleware explicitly. Express 4 does not catch a throw from an
+      // async handler — it would become an unhandled rejection and the request would simply
+      // hang, which is worse than the wrong status code.
+      return next(e);
+    }
+    if (e.code === "NOT_FOUND") {
+      console.warn("[auth] refresh presented a well-formed token we have no row for");
+    }
     // The reason is carried through rather than flattened. Every one of these still ends the
-    // session for the client, but "we could not find this token" and "this token is not ours"
-    // are different operational problems, and answering the same opaque code to both left an
-    // intermittent failure with nothing to go on.
-    const code = e instanceof SessionError ? e.code : "UNAUTHORIZED";
-    if (code === "NOT_FOUND") console.warn("[auth] refresh presented a well-formed token we have no row for");
-    return res.status(401).json({ error: { code, message: "Invalid refresh token" } });
+    // session, but "we could not find this token" and "this token is not ours" are different
+    // operational problems, and one opaque code for both left an intermittent failure with
+    // nothing to go on.
+    return res.status(401).json({ error: { code: e.code, message: "Invalid refresh token" } });
   }
 });
 
