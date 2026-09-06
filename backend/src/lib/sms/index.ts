@@ -55,21 +55,99 @@ function normalizeForMsg91(phone: string): string {
   return digits.length === 10 ? `91${digits}` : digits;
 }
 
+/**
+ * Twilio, over its international gateway.
+ *
+ * The point of this one is timing, not economics: it is roughly twenty times MSG91's price
+ * per Indian message, but it needs no DLT registration, so it can send a real code today
+ * instead of in a week. Twilio's own India guidelines are explicit that the international
+ * gateway bypasses DLT and the DND database, while the domestic gateway does not — this
+ * class deliberately uses the former.
+ *
+ * Two things to know before pointing real drivers at it. Indian operators increasingly
+ * filter international A2P traffic, so delivery is good but not guaranteed; and the sender
+ * is an unknown international number rather than a branded header. Both are reasons this is
+ * the bridge and MSG91 is the destination.
+ */
+export class TwilioProvider implements SmsProvider {
+  readonly name = "twilio";
+
+  constructor(
+    private readonly accountSid: string,
+    private readonly authToken: string,
+    /** An E.164 number you own, or a Messaging Service SID (`MG...`). */
+    private readonly from: string,
+  ) {}
+
+  async send(phone: string, message: string): Promise<void> {
+    const body = new URLSearchParams({ To: toE164(phone), Body: message });
+    // A Messaging Service handles sender selection and failover; a bare number does not.
+    // Twilio distinguishes them by parameter name, not by value.
+    body.set(this.from.startsWith("MG") ? "MessagingServiceSid" : "From", this.from);
+
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      // Never the message body — it carries the code, and this string reaches the logs.
+      //
+      // 21608 is worth calling out by name: on a trial account Twilio refuses any number you
+      // have not verified, and the raw error does not make that obvious. It is the single
+      // most likely reason a first real send appears to fail.
+      const hint = text.includes("21608")
+        ? " — Twilio trial accounts only send to numbers verified in Console → Verified Caller IDs"
+        : "";
+      throw new Error(`Twilio send failed (${res.status})${hint}: ${text.slice(0, 200)}`);
+    }
+  }
+}
+
+/** Twilio requires E.164. Bare 10-digit input is Indian by assumption, same as MSG91's path. */
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  return `+${digits}`;
+}
+
 let provider: SmsProvider | null = null;
 
 export function getSmsProvider(): SmsProvider {
   if (provider) return provider;
 
-  const { MSG91_AUTH_KEY, MSG91_SENDER_ID, MSG91_DLT_TEMPLATE_ID, NODE_ENV } = process.env;
+  const {
+    MSG91_AUTH_KEY,
+    MSG91_SENDER_ID,
+    MSG91_DLT_TEMPLATE_ID,
+    TWILIO_ACCOUNT_SID,
+    TWILIO_AUTH_TOKEN,
+    TWILIO_FROM,
+    NODE_ENV,
+  } = process.env;
 
+  // MSG91 wins when both are configured: once DLT clears it is cheaper and sends under your
+  // own branded header, so moving off the Twilio bridge is a matter of adding three
+  // variables rather than removing three.
   if (MSG91_AUTH_KEY && MSG91_SENDER_ID && MSG91_DLT_TEMPLATE_ID) {
     provider = new Msg91Provider(MSG91_AUTH_KEY, MSG91_SENDER_ID, MSG91_DLT_TEMPLATE_ID);
+  } else if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM) {
+    provider = new TwilioProvider(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM);
   } else {
     if (NODE_ENV === "production" && process.env.ALLOW_MOCK_PROVIDERS !== "1") {
       // Silently falling back to a logger in production would mean no user could ever
       // receive a code, and the failure would be invisible until someone complained.
       throw new Error(
-        "No SMS provider configured. Set MSG91_AUTH_KEY, MSG91_SENDER_ID and MSG91_DLT_TEMPLATE_ID.",
+        "No SMS provider configured. Set MSG91_AUTH_KEY, MSG91_SENDER_ID and MSG91_DLT_TEMPLATE_ID, " +
+          "or TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM.",
       );
     }
     if (NODE_ENV === "production") {

@@ -13,8 +13,19 @@
  * lets a driver reach APPROVED without an admin in the loop.
  */
 
+import crypto from "crypto";
+import { OtpPurpose } from "@prisma/client";
+
 import { api, apiOk, setTokenRefresher, sleep } from "./http";
 import { db } from "./db";
+
+/**
+ * Whether the target deployment still echoes OTP codes back over HTTP.
+ *
+ * Flipped to false the first time a request comes back without one, which is what happens
+ * the moment ALLOW_MOCK_PROVIDERS is removed and a real gateway takes over.
+ */
+let SMS_IS_MOCKED = true;
 
 export const KOCHI = { lat: 9.9312, lng: 76.2673 };
 /** ~5 km north of the pickup point — inside the first 15 km dispatch ring. */
@@ -122,17 +133,54 @@ export function nextPhone(prefix: string): string {
   return `${prefix}${String(phoneCounter).padStart(3, "0")}`;
 }
 
-/** Requests a code and reads it back out of the response. */
+/**
+ * Plants a challenge the suite already knows the code for.
+ *
+ * Used once a real SMS provider is configured and `devCode` stops coming back. It writes the
+ * same row `issueOtp` would, hashed the same way — `sha256(phone:purpose:code)` — so
+ * `verifyOtp` is still exercised for real against a real row. Nothing in the server changes
+ * shape for tests: there is no test-only endpoint and no branch in production code.
+ *
+ * It also avoids the other half of the problem. With a live gateway, every fixture actor in
+ * every run would send an actual SMS to a fabricated number — money spent, and on a Twilio
+ * trial an outright failure, since trials only deliver to numbers you have verified.
+ */
+async function seedOtp(phone: string, purpose: OtpPurpose): Promise<string> {
+  const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const codeHash = crypto.createHash("sha256").update(`${phone}:${purpose}:${code}`).digest("hex");
+
+  // Retire any live challenge first, exactly as issueOtp does — verifyOtp reads the newest
+  // unconsumed row, so a leftover would otherwise win.
+  await db.otpChallenge.updateMany({
+    where: { phone, purpose, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+  await db.otpChallenge.create({
+    data: { phone, purpose, codeHash, expiresAt: new Date(Date.now() + 5 * 60_000) },
+  });
+  return code;
+}
+
+/**
+ * A usable code for this phone.
+ *
+ * Prefers the real endpoint: while the mock provider is active it returns `devCode`, so the
+ * suite drives exactly what the app drives. Once a real provider is configured that field is
+ * gone by design, and the challenge is seeded directly instead.
+ */
 export async function getOtp(phone: string, purpose: "verify" | "reset" = "verify"): Promise<string> {
-  const path = purpose === "verify" ? "/auth/request-otp" : "/auth/forgot-password";
-  const body = await apiOk<{ devCode?: string }>(path, { method: "POST", body: { phone } });
-  if (!body.devCode) {
-    throw new Error(
-      `${path} returned no devCode for ${phone}. The suite depends on ALLOW_MOCK_PROVIDERS=1 ` +
-        `being set on the target deployment — without it, OTP cannot be automated.`,
-    );
+  const otpPurpose = purpose === "verify" ? OtpPurpose.PHONE_VERIFICATION : OtpPurpose.PASSWORD_RESET;
+
+  if (SMS_IS_MOCKED) {
+    const path = purpose === "verify" ? "/auth/request-otp" : "/auth/forgot-password";
+    const body = await apiOk<{ devCode?: string }>(path, { method: "POST", body: { phone } });
+    if (body.devCode) return body.devCode;
+    // The deployment has a real provider after all — remember it, so the rest of the run
+    // stops asking it to send SMS to numbers that do not exist.
+    SMS_IS_MOCKED = false;
   }
-  return body.devCode;
+
+  return seedOtp(phone, otpPurpose);
 }
 
 /** Full phone-ownership handshake, returning the token registration requires. */

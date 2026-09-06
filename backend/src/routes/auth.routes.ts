@@ -43,7 +43,14 @@ authRouter.post("/request-otp", otpRequestLimiter, async (req, res) => {
     if (e instanceof OtpError) {
       return res.status(429).json({ error: { code: e.code, message: e.message } });
     }
-    throw e;
+    // A gateway that rejects the send — an unverified number on a Twilio trial, an expired
+    // balance, an outage — must not escape an async handler. Express 4 does not catch that:
+    // the rejection goes unhandled and the request hangs until the client times out, which
+    // reads to the user as a dead app rather than a failed send.
+    console.error("[auth] request-otp: SMS provider failed:", e);
+    return res.status(502).json({
+      error: { code: "SMS_FAILED", message: "Could not send the code right now. Please try again." },
+    });
   }
 
   // `devCode` only exists while the mock SMS provider is active (no DLT registration yet)
@@ -412,8 +419,13 @@ authRouter.post("/forgot-password", otpRequestLimiter, async (req, res) => {
     try {
       ({ devCode } = await issueOtp(phone, OtpPurpose.PASSWORD_RESET, (code) => `${code} is your TruckGo password reset code.`));
     } catch (e) {
-      if (!(e instanceof OtpError)) throw e;
-      // Swallowed deliberately: surfacing the cooldown here would reveal that this phone
+      if (!(e instanceof OtpError)) {
+        // Same reasoning as request-otp: an unhandled rejection here would hang the request.
+        // Logged, then swallowed — the response below must stay identical either way, or the
+        // difference itself reveals whether this phone is registered.
+        console.error("[auth] forgot-password: SMS provider failed:", e);
+      }
+      // Cooldown is swallowed deliberately: surfacing it would reveal that this phone
       // number is registered.
     }
   }
