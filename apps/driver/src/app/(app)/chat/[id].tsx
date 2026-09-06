@@ -104,7 +104,17 @@ export default function Chat() {
     <Screen>
       <AppBar back title="Message customer" />
 
-      {messages === null ? (
+      {messages === null && error ? (
+        // A failed load left `messages` null, so the spinner below ran forever and the error
+        // was only ever rendered inside the composer — which does not exist yet at that
+        // point. The driver saw a screen that never finished loading and never said why.
+        <View style={styles.centered}>
+          <AppText variant="bodyLg" color="error" style={styles.centredText}>
+            {error}
+          </AppText>
+          <Button label="Retry" variant="outline" onPress={load} />
+        </View>
+      ) : messages === null ? (
         <View style={styles.centered}>
           <ActivityIndicator color={Colors.primary} />
         </View>
@@ -164,7 +174,8 @@ export default function Chat() {
 }
 
 const styles = StyleSheet.create({
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing.lg },
+  centredText: { textAlign: 'center' },
   body: { padding: Spacing.lg, gap: Spacing.sm, paddingBottom: Spacing.xl },
   flex: { flex: 1 },
   bubbleRow: { flexDirection: 'row' },

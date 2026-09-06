@@ -320,6 +320,11 @@ export default function Dashboard() {
                 />
                 <AppText style={DisplayType.capsLabel}>{online ? 'Online' : 'Offline'}</AppText>
                 <Switch
+                  // Unlabelled, this reads to a screen reader as a bare switch with no
+                  // indication of what it controls — and it is the single most consequential
+                  // control in the app.
+                  accessibilityLabel={online ? 'Go offline' : 'Go online'}
+                  accessibilityRole="switch"
                   value={online}
                   onValueChange={toggleOnline}
                   disabled={!approved}

@@ -8,12 +8,16 @@
 import type { VerificationStatus } from '@/lib/auth-context';
 
 export function driver(over: Record<string, unknown> = {}) {
+  // `over` is spread before driverProfile, not after: spreading it last replaced the whole
+  // merged profile with whatever partial the caller passed, silently dropping
+  // verificationStatus and turning an approved driver into an unapproved one.
   return {
     id: 'drv_1',
     role: 'DRIVER',
     fullName: 'Mock Verified Holder Owner',
     phone: '9876543210',
     email: null,
+    ...over,
     driverProfile: {
       vehicleType: 'tataAce',
       vehicleNumber: 'KL07AB1234',
@@ -24,7 +28,6 @@ export function driver(over: Record<string, unknown> = {}) {
       ratingCount: 124,
       ...(over.driverProfile as object),
     },
-    ...over,
   };
 }
 
