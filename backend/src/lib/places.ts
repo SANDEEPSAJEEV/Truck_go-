@@ -108,6 +108,16 @@ export class NominatimPlacesProvider implements PlacesProvider {
  * required field mask, instead of GET with query params.
  */
 export class GooglePlacesProvider implements PlacesProvider {
+  /**
+   * Stand-in for anything Google declines to answer.
+   *
+   * Reverse geocoding in particular used to end at `"9.9312, 76.2673"` — the coordinate
+   * string was returned as if it were an address, with nothing logged, so a key missing the
+   * Geocoding API looked exactly like a place that has no name. That string then went
+   * straight onto the rider's pickup field.
+   */
+  private readonly fallback = new NominatimPlacesProvider();
+
   readonly name = "google";
 
   constructor(private readonly apiKey: string) {}
@@ -163,9 +173,27 @@ export class GooglePlacesProvider implements PlacesProvider {
     const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
     url.searchParams.set("latlng", `${lat},${lng}`);
     url.searchParams.set("key", this.apiKey);
-    const res = await fetch(url.toString());
-    const data: any = await res.json().catch(() => null);
-    return data?.results?.[0]?.formatted_address ?? `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+    try {
+      const res = await fetch(url.toString());
+      const data: any = await res.json().catch(() => null);
+
+      if (data?.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+        // REQUEST_DENIED here almost always means the key is missing the Geocoding API, or
+        // its IP restriction excludes this server. Worth saying out loud: the symptom is a
+        // coordinate string where an address belongs, which reads as a data problem rather
+        // than a configuration one.
+        console.error(`[places] Google reverse geocode ${data.status}: ${data.error_message ?? ""}`);
+      }
+
+      const address = data?.results?.[0]?.formatted_address;
+      if (address) return address;
+    } catch (e) {
+      console.error("[places] Google reverse geocode failed:", e);
+    }
+
+    // A free place name beats a coordinate string the customer cannot read.
+    return this.fallback.reverse(lat, lng);
   }
 }
 
