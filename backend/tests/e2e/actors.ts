@@ -173,10 +173,14 @@ export async function getOtp(phone: string, purpose: "verify" | "reset" = "verif
 
   if (SMS_IS_MOCKED) {
     const path = purpose === "verify" ? "/auth/request-otp" : "/auth/forgot-password";
-    const body = await apiOk<{ devCode?: string }>(path, { method: "POST", body: { phone } });
-    if (body.devCode) return body.devCode;
-    // The deployment has a real provider after all — remember it, so the rest of the run
-    // stops asking it to send SMS to numbers that do not exist.
+    // Deliberately not apiOk: against a live gateway this call is *expected* to fail, because
+    // fixture phone numbers are invented and a trial account only delivers to numbers someone
+    // verified by hand. Treating that as a broken fixture would stop the whole run.
+    const res = await api<{ devCode?: string }>(path, { method: "POST", body: { phone } });
+    if (res.status === 200 && res.body?.devCode) return res.body.devCode;
+
+    // No devCode means a real provider is configured. Remember it, so the rest of the run
+    // stops asking a paid gateway to text numbers that do not exist.
     SMS_IS_MOCKED = false;
   }
 

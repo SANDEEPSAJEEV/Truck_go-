@@ -70,7 +70,23 @@ documentsRouter.post("/verify", async (req: AuthedRequest, res) => {
     return res.status(403).json({ error: { code: "SUSPENDED", message: "Your account is suspended. Contact support." } });
   }
 
-  const verificationStatus = await runAllChecks(driverId);
+  let verificationStatus;
+  try {
+    verificationStatus = await runAllChecks(driverId);
+  } catch (e) {
+    // The government-records lookup is a network call to a vendor, and `getKycProvider()`
+    // refuses outright when none is configured. Either way the rejection must not escape an
+    // async handler: Express 4 does not catch that, so the request hangs until the host gives
+    // up — which reaches the driver as a dead screen rather than "try again later".
+    console.error("[documents] verification failed:", e);
+    return res.status(503).json({
+      error: {
+        code: "VERIFICATION_UNAVAILABLE",
+        message: "Document verification is unavailable right now. Please try again shortly.",
+      },
+    });
+  }
+
   const documents = await prisma.driverDocument.findMany({ where: { driverId } });
   return res.json({ verificationStatus, documents });
 });
