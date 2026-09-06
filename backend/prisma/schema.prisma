@@ -367,7 +367,7 @@ model Notification {
 
   // Nullable so every row written before dispatch existed stays valid. Without these a
   // notification is a dead end: the driver reads "New load nearby" and has nothing to tap.
-  type      String?  @db.VarChar(40)
+  type      String? @db.VarChar(40)
   bookingId String?
   data      Json?
 
@@ -444,4 +444,23 @@ model OtpChallenge {
   // The live-challenge lookup is (phone, purpose, not consumed, newest first).
   @@index([phone, purpose, createdAt])
   @@index([expiresAt])
+}
+
+/// Bytes for an uploaded document, addressed by the same opaque key the storage interface
+/// already hands out.
+///
+/// Render's filesystem is ephemeral: anything the local provider wrote to disk disappeared on
+/// the next deploy, so a driver's licence scan survived only until the next push. Identity
+/// documents are small (capped at 8MB, five per driver) and are read rarely, through an
+/// authenticated route — Postgres holds them transactionally, backs them up with everything
+/// else, and needs no third-party account.
+///
+/// Object storage is the right home at scale. `StorageProvider` exists so that swap touches
+/// one file and no caller.
+model DocumentFile {
+  key         String   @id @db.VarChar(64)
+  contentType String   @db.VarChar(64)
+  size        Int
+  data        Bytes
+  createdAt   DateTime @default(now())
 }
