@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth-context';
 import { DEMO_MODE } from '@/lib/demo';
 import { vehicleLabel } from '@/lib/vehicle';
 import { countCompletedToday, type EarningsResponse } from '@/lib/earnings';
+import { getNotificationPrefs } from '@/lib/notification-prefs';
 
 type MyBid = { id: string; amount: number; status: string } | null;
 
@@ -212,9 +213,16 @@ export default function Dashboard() {
   useEffect(() => {
     let cleanup = () => {};
     getSocket().then((socket) => {
-      const onAccepted = (payload: { bookingId: string }) => {
-        // The rider chose this driver's bid — go straight to the trip rather than waiting
-        // for the next poll to notice the booking left the feed.
+      const onAccepted = async (payload: { bookingId: string }) => {
+        // The rider chose this driver's bid. Jumping straight into the trip is the right
+        // default, but it is a hard interruption if they are mid-way through something else,
+        // which is exactly what the "Open accepted trips" setting is for — it was written
+        // and then never read, so the toggle did nothing at all.
+        const prefs = await getNotificationPrefs();
+        if (!prefs.autoOpenAcceptedTrip) {
+          loadFeed();
+          return;
+        }
         router.push(`/(app)/trip/${payload.bookingId}`);
       };
       const onRejected = () => loadFeed();

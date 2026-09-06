@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { Screen } from '@/components/screen';
@@ -10,6 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Colors, Radii, Spacing } from '@/constants/theme';
 import { apiFetch, ApiError } from '@/lib/api';
 import { useAuth, type VerificationStatus } from '@/lib/auth-context';
+import {
+  captureDocument,
+  pickDocumentFile,
+  pickDocumentImage,
+  uploadDocument,
+  UploadError,
+} from '@/lib/upload';
 
 type DocumentRow = {
   type: string;
@@ -20,6 +27,8 @@ type DocumentRow = {
   rejectionReason: string | null;
   hasFile: boolean;
 };
+
+type PickSource = 'camera' | 'gallery' | 'file';
 
 type DocumentsResponse = {
   verificationStatus: VerificationStatus;
@@ -94,6 +103,10 @@ export default function Documents() {
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
   const [verifying, setVerifying] = useState(false);
+  /** Which document is mid-upload, so only that row shows a spinner. */
+  const [uploading, setUploading] = useState<string | null>(null);
+  /** Which row has its source picker open. Null on iOS, which uses the native sheet. */
+  const [picking, setPicking] = useState<string | null>(null);
 
   const load = useCallback(() => {
     apiFetch<DocumentsResponse>('/drivers/documents')
@@ -105,6 +118,53 @@ export default function Documents() {
   }, []);
 
   useFocusEffect(load);
+
+  async function upload(type: string, source: PickSource) {
+    setPicking(null);
+    setActionError('');
+    try {
+      const file =
+        source === 'camera'
+          ? await captureDocument()
+          : source === 'gallery'
+            ? await pickDocumentImage()
+            : await pickDocumentFile();
+      // Backing out of the picker is not an error and needs no message.
+      if (!file) return;
+
+      setUploading(type);
+      await uploadDocument(type, file);
+      load();
+    } catch (e) {
+      setActionError(
+        e instanceof UploadError || e instanceof ApiError
+          ? e.message
+          : 'Could not upload that document. Please try again.',
+      );
+    } finally {
+      setUploading(null);
+    }
+  }
+
+  function chooseSource(type: string) {
+    setActionError('');
+    if (Platform.OS !== 'ios') {
+      setPicking((current) => (current === type ? null : type));
+      return;
+    }
+    // iOS has a native sheet for exactly this and users expect it.
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: ['Cancel', 'Take a photo', 'Choose from photos', 'Choose a PDF'],
+        cancelButtonIndex: 0,
+      },
+      (index) => {
+        if (index === 1) upload(type, 'camera');
+        if (index === 2) upload(type, 'gallery');
+        if (index === 3) upload(type, 'file');
+      },
+    );
+  }
 
   async function runVerification() {
     setVerifying(true);
@@ -178,22 +238,57 @@ export default function Documents() {
 
         {required.map((doc) => {
           const icon = ROW_ICON[doc.status] ?? ROW_ICON.PENDING;
+          const busy = uploading === doc.type;
+          const open = picking === doc.type;
           return (
-            <View key={doc.type} style={styles.row}>
-              <View style={[styles.iconCircle, { backgroundColor: icon.bg }]}>
-                <MaterialIcons name={icon.name} size={18} color={icon.fg} />
+            <View key={doc.type} style={styles.docBlock}>
+              <View style={styles.row}>
+                <View style={[styles.iconCircle, { backgroundColor: icon.bg }]}>
+                  <MaterialIcons name={icon.name} size={18} color={icon.fg} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="headlineSm">{DOCUMENT_LABELS[doc.type] ?? doc.type}</AppText>
+                  <AppText variant="bodySm" color="onSurfaceVariant">
+                    {doc.rejectionReason ??
+                      (doc.expiresAt
+                        ? `Valid until ${new Date(doc.expiresAt).toLocaleDateString()}`
+                        : doc.status === 'APPROVED'
+                          ? 'Verified'
+                          : doc.hasFile
+                            ? 'Uploaded — awaiting verification'
+                            : 'Not uploaded yet')}
+                  </AppText>
+                </View>
+
+                {busy ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Pressable
+                    onPress={() => chooseSource(doc.type)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${doc.hasFile ? 'Replace' : 'Upload'} ${DOCUMENT_LABELS[doc.type] ?? doc.type}`}
+                    style={styles.uploadBtn}
+                  >
+                    <MaterialIcons
+                      name={doc.hasFile ? 'refresh' : 'file-upload'}
+                      size={16}
+                      color={Colors.primary}
+                    />
+                    <AppText variant="bodySm" color="primary">
+                      {doc.hasFile ? 'Replace' : 'Upload'}
+                    </AppText>
+                  </Pressable>
+                )}
               </View>
-              <View style={{ flex: 1 }}>
-                <AppText variant="headlineSm">{DOCUMENT_LABELS[doc.type] ?? doc.type}</AppText>
-                <AppText variant="bodySm" color="onSurfaceVariant">
-                  {doc.rejectionReason ??
-                    (doc.expiresAt
-                      ? `Valid until ${new Date(doc.expiresAt).toLocaleDateString()}`
-                      : doc.status === 'APPROVED'
-                        ? 'Verified'
-                        : 'Awaiting verification')}
-                </AppText>
-              </View>
+
+              {open ? (
+                <View style={styles.sourceRow}>
+                  <SourceButton icon="photo-camera" label="Camera" onPress={() => upload(doc.type, 'camera')} />
+                  <SourceButton icon="photo-library" label="Photos" onPress={() => upload(doc.type, 'gallery')} />
+                  <SourceButton icon="picture-as-pdf" label="PDF" onPress={() => upload(doc.type, 'file')} />
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -212,8 +307,31 @@ export default function Documents() {
           Your licence and vehicle details are checked against government records. Keep insurance,
           fitness and permit current — trips stop automatically when one expires.
         </AppText>
+
+        <AppText variant="bodySm" color="onSurfaceVariant">
+          Photograph documents in good light with all four corners visible. Replacing a document
+          sends it for checking again.
+        </AppText>
       </ScrollView>
     </Screen>
+  );
+}
+
+/** One of the three ways to supply a document. Android only — iOS gets the native sheet. */
+function SourceButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.sourceBtn} accessibilityRole="button">
+      <MaterialIcons name={icon} size={20} color={Colors.primary} />
+      <AppText variant="bodySm">{label}</AppText>
+    </Pressable>
   );
 }
 
@@ -244,5 +362,27 @@ const styles = StyleSheet.create({
     borderRadius: Radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  docBlock: { gap: Spacing.sm },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs / 2,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    borderColor: Colors.outlineVariant,
+  },
+  sourceRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.sm },
+  sourceBtn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.xs / 2,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radii.lg,
+    borderWidth: 1,
+    borderColor: Colors.outlineVariant,
+    backgroundColor: Colors.surfaceContainerLowest,
   },
 });

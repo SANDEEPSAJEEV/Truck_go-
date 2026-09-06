@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { Screen } from '@/components/screen';
 import { AppText } from '@/components/app-text';
@@ -89,6 +90,12 @@ const STAGE_COPY: Record<OtpStage, { label: string; hint: string; action: string
     action: 'Verify & start unloading',
   },
 };
+
+// Cancelling stops at the loading bay on purpose. Before the goods are aboard, a breakdown
+// or a wrong address is a normal thing to back out of. Once loading has started the driver
+// is holding someone else's cargo, and walking away from that is a support conversation, not
+// a button. The server allows it right up to delivery; this is the narrower, deliberate rule.
+const CANCELLABLE = ['ACCEPTED', 'EN_ROUTE_TO_PICKUP', 'ARRIVED_AT_PICKUP'];
 
 // GPS is streamed to the customer only while the truck is actually moving toward them —
 // no reason to broadcast position while parked at a loading bay.
@@ -223,6 +230,34 @@ export default function Trip() {
     return () => clearInterval(timer);
   }, [booking?.status, id]);
 
+  // A driver who breaks down, or is sent to the wrong place, previously had no way out of a
+  // trip from inside the app — the backend has always supported this, nothing called it.
+  const [policy, setPolicy] = useState<{ secondsRemaining: number } | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!booking || !CANCELLABLE.includes(booking.status)) return;
+    apiFetch<{ secondsRemaining: number }>(`/trips/${id}/cancellation-policy`)
+      .then(setPolicy)
+      .catch(() => {
+        // Not knowing the window must not remove the ability to cancel.
+        setPolicy(null);
+      });
+  }, [booking?.status, id]);
+
+  async function cancelTrip() {
+    setCancelling(true);
+    setError('');
+    try {
+      await apiFetch(`/trips/${id}/cancel`, { method: 'POST', body: {} });
+      router.replace('/(app)/(tabs)/dashboard');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not cancel this trip.');
+      setCancelling(false);
+    }
+  }
+
   async function advanceTo(status: string) {
     setBusy(true);
     setError('');
@@ -291,7 +326,19 @@ export default function Trip() {
 
   return (
     <Screen>
-      <AppBar back title="Active Trip" />
+      <AppBar
+        back
+        right={
+          <Pressable
+            onPress={() => router.push(`/(app)/chat/${id}`)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Message the customer"
+          >
+            <MaterialIcons name="chat-bubble-outline" size={22} color={Colors.onSurface} />
+          </Pressable>
+        }
+        title="Active Trip" />
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.statusCard}>
           <AppText variant="headlineMd" color="onPrimaryContainer">
@@ -383,6 +430,39 @@ export default function Trip() {
         ) : nextStatus ? (
           <Button label={NEXT_LABEL[booking.status]} onPress={() => advanceTo(nextStatus)} loading={busy} />
         ) : null}
+
+        {CANCELLABLE.includes(booking.status) ? (
+          confirmCancel ? (
+            <View style={styles.cancelBox}>
+              <AppText variant="bodySm">
+                Cancel this trip? The customer is told immediately and the load goes back to
+                other drivers.
+                {policy && policy.secondsRemaining > 0
+                  ? ` Free to cancel for another ${Math.ceil(policy.secondsRemaining / 60)} minute${Math.ceil(policy.secondsRemaining / 60) === 1 ? '' : 's'}.`
+                  : policy
+                    ? ' The free-cancellation window has closed, so this may affect your rating.'
+                    : ''}
+              </AppText>
+              <View style={styles.cancelRow}>
+                <Button
+                  label="Keep trip"
+                  variant="outline"
+                  style={styles.flex}
+                  onPress={() => setConfirmCancel(false)}
+                />
+                <Button
+                  label="Cancel trip"
+                  variant="danger"
+                  style={styles.flex}
+                  loading={cancelling}
+                  onPress={cancelTrip}
+                />
+              </View>
+            </View>
+          ) : (
+            <Button label="Cancel trip" variant="ghost" onPress={() => setConfirmCancel(true)} />
+          )
+        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -395,6 +475,14 @@ const styles = StyleSheet.create({
   navRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   centered: { alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing.lg },
   retryButton: { minWidth: 160 },
+  flex: { flex: 1 },
+  cancelBox: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radii.lg,
+    backgroundColor: Colors.errorContainer,
+  },
+  cancelRow: { flexDirection: 'row', gap: Spacing.sm },
   statusCard: {
     borderRadius: Radii.lg,
     padding: Spacing.lg,

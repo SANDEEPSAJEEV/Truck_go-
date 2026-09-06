@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
@@ -141,6 +141,29 @@ export function LiveMap({
           </Marker>
         ) : null}
       </MapView>
+
+      {/* Panning switches follow off, which is right — but before this there was no way back
+          on, so one stray finger meant the truck drifted off screen for the rest of the trip
+          and the only fix was leaving the screen and returning. Offered only when there is
+          something to recentre on and following is actually off. */}
+      {(driver || center) && !following ? (
+        <Pressable
+          onPress={() => {
+            const target = driver ?? center!;
+            setFollowing(true);
+            mapRef.current?.animateCamera(
+              { center: { latitude: target.lat, longitude: target.lng } },
+              { duration: 500 },
+            );
+          }}
+          style={styles.recenter}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Recentre the map on your position"
+        >
+          <MaterialIcons name="my-location" size={20} color={Colors.primary} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -149,6 +172,22 @@ const styles = StyleSheet.create({
   // Deliberately no `flex: 1` here: inside a ScrollView that collapses to zero height and
   // the map silently disappears. The caller supplies the height via `style`.
   wrap: { overflow: 'hidden', backgroundColor: Colors.surfaceContainer, minHeight: 200 },
+  recenter: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
   dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 3, borderColor: '#ffffff' },
   truck: {
     width: 38,
