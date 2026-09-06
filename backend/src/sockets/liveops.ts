@@ -73,18 +73,35 @@ export function attachLiveops(io: Server) {
     // (like `trip:otp`) to one party without the shared trip room leaking it to both.
     socket.join(`user:${userId}`);
 
+    // Which rooms this client currently wants to be in.
+    //
+    // The authorization check made `trip:subscribe` asynchronous, and that opened a race:
+    // subscribe starts a database lookup, unsubscribe arrives and leaves a room the socket
+    // has not joined yet, then the lookup finishes and joins it anyway. The socket ends up
+    // in a room it explicitly asked to leave — a rider who closed the tracking screen would
+    // carry on receiving that trip's live position.
+    const wanted = new Set<string>();
+
     socket.on("trip:subscribe", async (bookingId: string) => {
+      if (typeof bookingId !== "string" || !bookingId) return;
+      wanted.add(bookingId);
+
       if (!(await mayAccessTrip(userId, bookingId))) {
+        wanted.delete(bookingId);
         // Told, rather than silently ignored: a client whose join was refused should stop
         // waiting for events that are never coming.
         socket.emit("trip:subscribe:denied", { bookingId });
         return;
       }
+
+      // Re-checked after the await: the client may have unsubscribed while we were asking.
+      if (!wanted.has(bookingId)) return;
       socket.join(`trip:${bookingId}`);
     });
 
     socket.on("trip:unsubscribe", (bookingId: string) => {
       if (typeof bookingId !== "string" || !bookingId) return;
+      wanted.delete(bookingId);
       socket.leave(`trip:${bookingId}`);
     });
 
