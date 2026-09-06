@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.truckgo.driver",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#ED8936",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
