@@ -330,7 +330,9 @@ export default function Trip() {
         back
         right={
           <Pressable
-            onPress={() => router.push(`/(app)/chat/${id}`)}
+            // Typed routes want the route pattern plus params, not an interpolated path —
+            // the literal form is what lets TypeScript verify the route exists at all.
+            onPress={() => router.push({ pathname: '/(app)/chat/[id]', params: { id } })}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Message the customer"

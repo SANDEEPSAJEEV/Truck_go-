@@ -92,7 +92,7 @@ describe('requests', () => {
     await setTokens('access-1', 'refresh-1');
     jest.spyOn(global, 'fetch').mockRejectedValueOnce(new TypeError('Network request failed'));
 
-    const error = await apiFetch('/drivers/me').catch((e) => e);
+    const error = (await apiFetch('/drivers/me').catch((e) => e)) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(0);
     expect(error.isNetwork).toBe(true);

@@ -169,7 +169,7 @@ describe('stored preferences', () => {
   });
 
   it('round-trips a change', async () => {
-    await setNotificationPrefs({ newLoadAlerts: false });
+    await setNotificationPrefs({ ...DEFAULT_PREFS, newLoadAlerts: false });
     await expect(getNotificationPrefs()).resolves.toMatchObject({ newLoadAlerts: false });
   });
 
