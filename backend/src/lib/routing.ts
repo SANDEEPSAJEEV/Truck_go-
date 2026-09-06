@@ -148,10 +148,16 @@ export class GoogleRouteProvider implements RouteProvider {
     // Duration comes back as a protobuf duration string, e.g. "1234s".
     const seconds = Number(String(route.duration ?? "0s").replace("s", "")) || 0;
 
+    // Google omits `distanceMeters` entirely when the answer is zero — origin and destination
+    // in the same spot. Dividing an absent field gave NaN, which serialised to null, and the
+    // fare came back null with it. A rider who picks the same place twice, or two points in
+    // one building, would have got a booking with no price on it.
+    const meters = Number(route.distanceMeters ?? 0);
+
     return {
-      distanceKm: Number((route.distanceMeters / 1000).toFixed(2)),
+      distanceKm: Number.isFinite(meters) ? Number((meters / 1000).toFixed(2)) : 0,
       durationMin: Math.round(seconds / 60),
-      polyline: route.polyline.encodedPolyline,
+      polyline: route.polyline?.encodedPolyline ?? "",
       provider: this.name,
     };
   }
@@ -192,23 +198,37 @@ export async function reverseGeocode(point: LatLng): Promise<string | null> {
 
   try {
     if (key) {
-      const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-      url.searchParams.set("latlng", `${point.lat},${point.lng}`);
-      // Locality-level is what a person actually says out loud; street addresses are noise
-      // for "where is my truck right now".
-      url.searchParams.set("result_type", "locality|sublocality|neighborhood");
-      url.searchParams.set("key", key);
+      // Two passes. Locality-level is what a person actually says out loud, so ask for that
+      // first — but plenty of real coordinates have no locality component at all (a highway,
+      // an industrial estate, open country), and the filtered query then returns nothing.
+      // Falling straight through to null there is what put raw "9.9312, 76.2673" on the
+      // rider's pickup field instead of a place name.
+      const lookup = async (resultType?: string) => {
+        const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+        url.searchParams.set("latlng", `${point.lat},${point.lng}`);
+        if (resultType) url.searchParams.set("result_type", resultType);
+        url.searchParams.set("key", key);
 
-      const res = await fetch(url.toString());
-      const data: any = await res.json().catch(() => null);
-      const first = data?.results?.[0];
+        const res = await fetch(url.toString());
+        const data: any = await res.json().catch(() => null);
+        if (data?.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+          // REQUEST_DENIED means the key is missing the Geocoding API or is IP-locked away
+          // from this server — silence here would look identical to "nowhere has a name".
+          console.error(`[geocode] Google reverse geocode ${data.status}: ${data.error_message ?? ""}`);
+        }
+        return data?.results?.[0] ?? null;
+      };
+
+      const first = (await lookup("locality|sublocality|neighborhood")) ?? (await lookup());
       if (first) {
         const locality = first.address_components?.find((c: any) =>
           c.types?.some((t: string) => ["locality", "sublocality", "neighborhood"].includes(t)),
         );
-        return locality?.long_name ?? first.formatted_address ?? null;
+        if (locality?.long_name) return locality.long_name;
+        if (first.formatted_address) return first.formatted_address;
       }
-      return null;
+      // Google gave nothing usable. Rather than hand back a coordinate string, try the free
+      // service — a place name from anywhere beats none.
     }
 
     // Nominatim: free, no key. Its usage policy requires an identifying User-Agent.

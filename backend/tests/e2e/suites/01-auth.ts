@@ -13,12 +13,23 @@ import { db } from "../db";
 suite("auth", "01 — Auth", () => {
   /* ---------------------------------------------------------------- OTP issue */
 
-  test("1.1", "request-otp returns a devCode while the mock provider is active", async () => {
+  test("1.1", "request-otp behaves correctly for whichever SMS provider is live", async () => {
     const phone = nextPhone(ctx.phonePrefix);
     const res = await api("/auth/request-otp", { method: "POST", body: { phone } });
-    expect(res.status, "status").toBe(200);
-    expect(res.body.devCode, "devCode").toBeDefined();
-    expect(String(res.body.devCode).length, "devCode length").toBe(6);
+
+    if (res.status === 200) {
+      // Mock provider: the code comes back so onboarding is scriptable before SMS is wired.
+      expect(res.body.devCode, "devCode").toBeDefined();
+      expect(String(res.body.devCode).length, "devCode length").toBe(6);
+      return;
+    }
+
+    // Real gateway: this fixture number is invented and, on a trial account, unverified — so
+    // a refusal is the correct answer. What matters is that it is a clean, typed refusal and
+    // never a hang or a 500, and that the code is never echoed back over HTTP.
+    expect(res.status, "status").toBe(502);
+    expect(res.code, "code").toBe("SMS_FAILED");
+    expect(res.body.devCode, "a real provider never echoes the code").toBeUndefined();
   });
 
   test("1.2", "request-otp rejects a spaced number, which is why the apps normalize", async () => {
@@ -37,10 +48,15 @@ suite("auth", "01 — Auth", () => {
     }
   });
 
-  test("1.4", "a second request inside 60s hits the cooldown", async () => {
+  test("1.4", "the cooldown holds even when the send itself failed", async () => {
     const phone = nextPhone(ctx.phonePrefix);
+
+    // The first call may be refused by a live gateway — the fixture number is invented. The
+    // challenge is written before the send is attempted, so the cooldown must still apply.
+    // If it did not, a failing gateway would become a way to bypass the rate limit entirely
+    // and bombard a real number with retries.
     const first = await api("/auth/request-otp", { method: "POST", body: { phone } });
-    expect(first.status, "first status").toBe(200);
+    expect(first.status, "first status").toBeOneOf([200, 502]);
 
     const second = await api("/auth/request-otp", { method: "POST", body: { phone } });
     expect(second.status, "second status").toBe(429);
